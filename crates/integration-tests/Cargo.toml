@@ -17,6 +17,7 @@ tar.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tokio.workspace = true
+bincode.workspace = true
 
 # reth
 reth-stateless.workspace = true
@@ -38,6 +39,14 @@ ere-dockerized.workspace = true
 
 # mpt
 sparsestate.workspace = true
+openvm-mpt = { git = "https://github.com/jsign/openvm-reth-benchmark.git", rev = "65289c489e180836c845bc5290d3f3d517caaffc", features = [
+    "host",
+] }
+
+# alloy
+alloy-primitives.workspace = true
+alloy-rlp.workspace = true
+alloy-consensus.workspace = true
 
 # local
 block-encoding-length = { workspace = true, default-features = true, features = [
