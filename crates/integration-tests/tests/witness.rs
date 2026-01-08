@@ -9,13 +9,12 @@ use integration_tests::{
 use openvm_mpt::statelesstrie::OpenVMStatelessSparseTrie;
 use reth_stateless::trie::StatelessSparseTrie;
 use sparsestate::SparseState;
-// use openvm_mpt::statelesstrie::OpenVMStatelessSparseTrie;
 use stateless_validator_reth::guest::{
     StatelessValidatorRethGuestWithTrie, StatelessValidatorRethInput,
 };
 
-#[tokio::test(flavor = "multi_thread")]
-async fn sparse_mpts() {
+#[test]
+fn sparse_mpts() {
     println!("Starting transform_witness test...");
     untar_fixtures().unwrap();
     let fixtures: Vec<_> = fs::read_dir(fixtures_dir().join("block"))

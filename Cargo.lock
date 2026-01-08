@@ -3197,7 +3197,6 @@ dependencies = [
  "stateless-validator-ethrex",
  "stateless-validator-reth",
  "tar",
- "tokio",
  "tracing",
  "tracing-subscriber",
 ]
