@@ -15,7 +15,6 @@ use stateless_validator_reth::guest::{
 
 #[test]
 fn sparse_mpts() {
-    println!("Starting transform_witness test...");
     untar_fixtures().unwrap();
     let fixtures: Vec<_> = fs::read_dir(fixtures_dir().join("block"))
         .unwrap()
