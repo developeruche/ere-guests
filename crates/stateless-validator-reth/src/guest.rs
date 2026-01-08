@@ -7,7 +7,7 @@ use reth_chainspec::ChainSpec;
 use reth_evm_ethereum::EthEvmConfig;
 use reth_primitives_traits::Block;
 use reth_stateless::{
-    Genesis, StatelessInput, UncompressedPublicKey, stateless_validation_with_trie,
+    Genesis, StatelessInput, StatelessTrie, UncompressedPublicKey, stateless_validation_with_trie,
 };
 use serde::{Deserialize, Serialize};
 use sparsestate::SparseState;
@@ -31,11 +31,16 @@ pub struct StatelessValidatorRethInput {
 pub type StatelessValidatorRethIo =
     IoSerde<StatelessValidatorRethInput, StatelessValidatorOutput, BincodeLegacy>;
 
+/// [`Guest`] implementation for Reth stateless validator with default sparse MPT.
+pub type StatelessValidatorRethGuest = StatelessValidatorRethGuestWithTrie<SparseState>;
+
 /// [`Guest`] implementation for Reth stateless validator.
 #[derive(Debug, Clone)]
-pub struct StatelessValidatorRethGuest;
+pub struct StatelessValidatorRethGuestWithTrie<T: StatelessTrie> {
+    _marker: core::marker::PhantomData<T>,
+}
 
-impl Guest for StatelessValidatorRethGuest {
+impl<T: StatelessTrie> Guest for StatelessValidatorRethGuestWithTrie<T> {
     type Io = StatelessValidatorRethIo;
 
     fn compute<P: Platform>(input: GuestInput<Self>) -> GuestOutput<Self> {
@@ -54,7 +59,7 @@ impl Guest for StatelessValidatorRethGuest {
         });
 
         let res = P::cycle_scope("validation", || {
-            stateless_validation_with_trie::<SparseState, _, _>(
+            stateless_validation_with_trie::<T, _, _>(
                 input.stateless_input.block,
                 input.public_keys,
                 input.stateless_input.witness,
