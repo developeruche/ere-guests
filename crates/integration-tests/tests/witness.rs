@@ -7,6 +7,7 @@ use integration_tests::{
     fixtures_dir, stateless_validator::StatelessValidatorFixture, untar_fixtures,
 };
 use openvm_mpt::statelesstrie::OpenVMStatelessSparseTrie;
+use reth_stateless::trie::StatelessSparseTrie;
 use sparsestate::SparseState;
 // use openvm_mpt::statelesstrie::OpenVMStatelessSparseTrie;
 use stateless_validator_reth::guest::{
@@ -33,6 +34,11 @@ async fn sparse_mpts() {
         }
         println!("Processing fixture: {}", fixture.name);
         let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
+
+        // Reth with default sparse MPT from Reth repo.
+        StatelessValidatorRethGuestWithTrie::<StatelessSparseTrie>::compute::<NoopPlatform>(
+            input.clone(),
+        );
 
         // Reth with Risc0 sparse MPT.
         StatelessValidatorRethGuestWithTrie::<SparseState>::compute::<NoopPlatform>(input.clone());
