@@ -79,27 +79,44 @@ impl Guest for StatelessValidatorEthrexGuest {
     fn compute<P: Platform>(
         StatelessValidatorEthrexInput(input): GuestInput<Self>,
     ) -> GuestOutput<Self> {
-        let (header, parent_hash) = P::cycle_scope("public_inputs_preparation", || {
-            (
-                input.blocks[0].header.clone(),
-                input.blocks[0].header.parent_hash,
-            )
-        });
+        let (header, parent_hash, beacon_root) =
+            P::cycle_scope("public_inputs_preparation", || {
+                (
+                    input.blocks[0].header.clone(),
+                    input.blocks[0].header.parent_hash,
+                    input.blocks[0]
+                        .header
+                        .parent_beacon_block_root
+                        .unwrap_or_default(),
+                )
+            });
 
         if input.blocks.len() != 1 {
-            return StatelessValidatorOutput::new(header.compute_block_hash(), parent_hash, false);
+            return StatelessValidatorOutput::new(
+                header.compute_block_hash(),
+                parent_hash,
+                beacon_root,
+                false,
+            );
         }
 
         let res = P::cycle_scope("validation", || execution_program(input));
 
         match res {
-            Ok(out) => StatelessValidatorOutput::new(out.last_block_hash, parent_hash, true),
+            Ok(out) => {
+                StatelessValidatorOutput::new(out.last_block_hash, parent_hash, beacon_root, true)
+            }
             Err(err) => {
                 P::print(&format!(
                     "Block {} validation failed: {err}\n",
                     header.number
                 ));
-                StatelessValidatorOutput::new(header.compute_block_hash(), parent_hash, false)
+                StatelessValidatorOutput::new(
+                    header.compute_block_hash(),
+                    parent_hash,
+                    beacon_root,
+                    false,
+                )
             }
         }
     }
@@ -112,8 +129,8 @@ mod test {
     #[test]
     fn serialize_output() {
         for output in [
-            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], false),
-            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], true),
+            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], [0x00; 32], false),
+            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], [0xff; 32], true),
         ] {
             assert_eq!(
                 StatelessValidatorEthrexIo::serialize_output(&output).unwrap(),

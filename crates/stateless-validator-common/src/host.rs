@@ -14,6 +14,26 @@ impl StatelessValidatorOutput {
         Self::new(
             stateless_input.block.hash_slow(),
             stateless_input.block.parent_hash,
+            stateless_input
+                .block
+                .parent_beacon_block_root
+                .unwrap_or_default(),
+            success,
+        )
+    }
+
+    /// Constructs a output from [`StatelessInput`] and an bool indicating
+    /// whehter the stateless validation is successful or not.
+    pub fn from_stateless_input2(stateless_input: &StatelessInput, success: bool) -> Self {
+        lighthouse_types::ExecutionPayload
+
+        Self::new(
+            stateless_input.block.hash_slow(),
+            stateless_input.block.parent_hash,
+            stateless_input
+                .block
+                .parent_beacon_block_root
+                .unwrap_or_default(),
             success,
         )
     }

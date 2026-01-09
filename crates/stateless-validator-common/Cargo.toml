@@ -16,6 +16,9 @@ sha2 = { workspace = true, optional = true }
 # reth
 reth-stateless = { workspace = true, optional = true }
 
+# lighthouse
+lighthouse-types.workspace = true
+
 [features]
 # guest
 default = ["std"]

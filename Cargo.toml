@@ -73,6 +73,9 @@ ethrex-rlp = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d7085
 ethrex-rpc = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d70854d0fe3b0f29ed8961e5cbfc5de7bdd7d1", default-features = false }
 ethrex-vm = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d70854d0fe3b0f29ed8961e5cbfc5de7bdd7d1", default-features = false }
 
+# lighthouse
+lighthouse-types = { git = "https://github.com/sigp/lighthouse/", tag = "v8.0.1", package = "types" }
+
 # ssz
 ethereum_ssz = "0.9"
 ethereum_ssz_derive = "0.9"

@@ -46,12 +46,18 @@ impl Guest for StatelessValidatorRethGuest {
         let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
         let evm_config = EthEvmConfig::new(chain_spec.clone());
 
-        let (header, parent_hash) = P::cycle_scope("public_inputs_preparation", || {
-            (
-                input.stateless_input.block.header().clone(),
-                input.stateless_input.block.parent_hash,
-            )
-        });
+        let (header, parent_hash, beacon_root) =
+            P::cycle_scope("public_inputs_preparation", || {
+                (
+                    input.stateless_input.block.header().clone(),
+                    input.stateless_input.block.parent_hash,
+                    input
+                        .stateless_input
+                        .block
+                        .parent_beacon_block_root
+                        .unwrap_or_default(),
+                )
+            });
 
         let res = P::cycle_scope("validation", || {
             stateless_validation_with_trie::<SparseState, _, _>(
@@ -65,10 +71,12 @@ impl Guest for StatelessValidatorRethGuest {
         });
 
         match res {
-            Ok(block_hash) => StatelessValidatorOutput::new(block_hash, parent_hash, true),
+            Ok(block_hash) => {
+                StatelessValidatorOutput::new(block_hash, parent_hash, beacon_root, true)
+            }
             Err(err) => {
                 P::print(&format!("Block validation failed: {err}\n"));
-                StatelessValidatorOutput::new(header.hash_slow(), parent_hash, false)
+                StatelessValidatorOutput::new(header.hash_slow(), parent_hash, beacon_root, false)
             }
         }
     }

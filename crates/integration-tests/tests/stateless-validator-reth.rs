@@ -21,6 +21,11 @@ fn test_execution(zkvm_kind: zkVMKind) {
             let output = StatelessValidatorOutput::new(
                 fixture.stateless_input.block.hash_slow(),
                 fixture.stateless_input.block.parent_hash,
+                fixture
+                    .stateless_input
+                    .block
+                    .parent_beacon_block_root
+                    .unwrap_or_default(),
                 fixture.success,
             );
             TestCase::new::<StatelessValidatorRethGuest>(fixture.name, input, output)

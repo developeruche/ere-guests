@@ -57,8 +57,8 @@ mod test {
     #[test]
     fn serialize_output() {
         for output in [
-            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], false),
-            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], true),
+            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], [0x00; 32], false),
+            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], [0xff; 32], true),
         ] {
             assert_eq!(
                 StatelessValidatorRethIo::serialize_output(&output).unwrap(),

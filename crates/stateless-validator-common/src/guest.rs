@@ -15,6 +15,8 @@ pub struct StatelessValidatorOutput {
     pub block_hash: [u8; 32],
     /// Parent hash
     pub parent_hash: [u8; 32],
+    /// Beacon root
+    pub beacon_root: [u8; 32],
     /// Stateless validation is successful or not.
     pub successful_block_validation: bool,
 }
@@ -24,11 +26,13 @@ impl StatelessValidatorOutput {
     pub fn new(
         block_hash: impl Into<[u8; 32]>,
         parent_hash: impl Into<[u8; 32]>,
+        beacon_root: impl Into<[u8; 32]>,
         successful_block_validation: bool,
     ) -> Self {
         Self {
             block_hash: block_hash.into(),
             parent_hash: parent_hash.into(),
+            beacon_root: beacon_root.into(),
             successful_block_validation,
         }
     }
@@ -38,7 +42,8 @@ impl StatelessValidatorOutput {
         let mut buf = [0; STATELESS_VALIDATOR_OUTPUT_SIZE];
         buf[0..32].copy_from_slice(&self.block_hash);
         buf[32..64].copy_from_slice(&self.parent_hash);
-        buf[64] = self.successful_block_validation as u8;
+        buf[64..96].copy_from_slice(&self.beacon_root);
+        buf[96] = self.successful_block_validation as u8;
         buf
     }
 }
