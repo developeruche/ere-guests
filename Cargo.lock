@@ -3508,6 +3508,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "stateless-validator-common",
  "stateless-validator-ethrex",
  "stateless-validator-reth",
  "tar",

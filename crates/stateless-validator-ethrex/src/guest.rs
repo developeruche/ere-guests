@@ -2,6 +2,8 @@
 
 use alloc::format;
 use core::fmt::Debug;
+use lighthouse_types::{execution_payload, execution_payload_header};
+use stateless_validator_common::guest::execution_payload_to_header_hash;
 
 use ere_io::rkyv::{
     IoRkyv,
@@ -9,6 +11,8 @@ use ere_io::rkyv::{
 };
 use ethrex_common::types::block_execution_witness::ExecutionWitness;
 use ethrex_guest_program::{execution::execution_program, input::ProgramInput};
+
+use crate::execution_payload::to_execution_payload_ethrex;
 
 #[rustfmt::skip]
 pub use {
@@ -79,44 +83,36 @@ impl Guest for StatelessValidatorEthrexGuest {
     fn compute<P: Platform>(
         StatelessValidatorEthrexInput(input): GuestInput<Self>,
     ) -> GuestOutput<Self> {
-        let (header, parent_hash, beacon_root) =
-            P::cycle_scope("public_inputs_preparation", || {
-                (
-                    input.blocks[0].header.clone(),
-                    input.blocks[0].header.parent_hash,
-                    input.blocks[0]
-                        .header
-                        .parent_beacon_block_root
-                        .unwrap_or_default(),
-                )
-            });
-
         if input.blocks.len() != 1 {
-            return StatelessValidatorOutput::new(
-                header.compute_block_hash(),
-                parent_hash,
-                beacon_root,
-                false,
-            );
+            return StatelessValidatorOutput::new([0; 32], [0; 32], false);
         }
 
+        let (execution_payload_header_hash, beacon_root) =
+            P::cycle_scope("public_inputs_preparation", || {
+                let execution_payload = to_execution_payload_ethrex(
+                    &input.blocks[0],
+                    &input.execution_witness.chain_config,
+                );
+                let execution_payload_header_hash =
+                    execution_payload_to_header_hash(&execution_payload);
+                let beacon_root = input.blocks[0]
+                    .header
+                    .parent_beacon_block_root
+                    .unwrap_or_default();
+
+                (execution_payload_header_hash, beacon_root)
+            });
+
+        let block_num = input.blocks[0].header.number;
         let res = P::cycle_scope("validation", || execution_program(input));
 
         match res {
-            Ok(out) => {
-                StatelessValidatorOutput::new(out.last_block_hash, parent_hash, beacon_root, true)
+            Ok(_) => {
+                StatelessValidatorOutput::new(execution_payload_header_hash, beacon_root, true)
             }
             Err(err) => {
-                P::print(&format!(
-                    "Block {} validation failed: {err}\n",
-                    header.number
-                ));
-                StatelessValidatorOutput::new(
-                    header.compute_block_hash(),
-                    parent_hash,
-                    beacon_root,
-                    false,
-                )
+                P::print(&format!("Block {} validation failed: {err}\n", block_num));
+                StatelessValidatorOutput::new(execution_payload_header_hash, beacon_root, false)
             }
         }
     }
@@ -129,8 +125,8 @@ mod test {
     #[test]
     fn serialize_output() {
         for output in [
-            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], [0x00; 32], false),
-            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], [0xff; 32], true),
+            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], false),
+            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], true),
         ] {
             assert_eq!(
                 StatelessValidatorEthrexIo::serialize_output(&output).unwrap(),

@@ -6,9 +6,10 @@ use ere_dockerized::zkVMKind;
 use integration_tests::{
     TestCase, fixtures_dir, stateless_validator::StatelessValidatorFixture, untar_fixtures,
 };
-use stateless_validator_ethrex::execution_payload;
-use stateless_validator_reth::guest::{
-    StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput,
+use stateless_validator_common::guest::execution_payload_to_header_hash;
+use stateless_validator_reth::{
+    guest::{StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput},
+    host::to_execution_payload_reth,
 };
 
 fn test_execution(zkvm_kind: zkVMKind) {
@@ -20,12 +21,9 @@ fn test_execution(zkvm_kind: zkVMKind) {
             let fixture: StatelessValidatorFixture = serde_json::from_slice(&bytes).unwrap();
             let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
 
-            let execution_payload =
-                stateless_validator_reth::execution_payload::to_execution_payload(
-                    &fixture.stateless_input,
-                );
+            let execution_payload = to_execution_payload_reth(&fixture.stateless_input);
             let execution_payload_header_hash =
-                execution_payload::execution_payload_to_header_hash(&execution_payload);
+                execution_payload_to_header_hash(&execution_payload);
             let beacon_root = fixture
                 .stateless_input
                 .block
