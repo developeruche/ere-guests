@@ -5,7 +5,6 @@ use alloc::{format, sync::Arc, vec::Vec};
 use ere_io::serde::{IoSerde, bincode::BincodeLegacy};
 use reth_chainspec::ChainSpec;
 use reth_evm_ethereum::EthEvmConfig;
-use reth_primitives_traits::Block;
 use reth_stateless::{
     Genesis, StatelessInput, UncompressedPublicKey, stateless_validation_with_trie,
 };

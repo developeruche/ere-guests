@@ -2,7 +2,6 @@
 
 use alloc::format;
 use core::fmt::Debug;
-use lighthouse_types::{execution_payload, execution_payload_header};
 use stateless_validator_common::guest::execution_payload_to_header_hash;
 
 use ere_io::rkyv::{
