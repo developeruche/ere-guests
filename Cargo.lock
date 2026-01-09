@@ -6505,6 +6505,7 @@ dependencies = [
  "rkyv",
  "serde",
  "sha2",
+ "tree_hash",
  "types",
 ]
 

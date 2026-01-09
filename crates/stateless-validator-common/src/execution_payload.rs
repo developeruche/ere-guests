@@ -3,12 +3,12 @@
 use lighthouse_types::{
     Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload,
     ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
-    ExecutionPayloadElectra, FixedVector, ForkName, Hash256, MainnetEthSpec, Transactions,
-    Uint256, VariableList, Withdrawals,
+    ExecutionPayloadElectra, FixedVector, ForkName, Hash256, MainnetEthSpec, Transactions, Uint256,
+    VariableList, Withdrawals,
 };
 
 // Type alias for the execution payload with MainnetEthSpec
-type MainnetExecutionPayload = ExecutionPayload<MainnetEthSpec>;
+pub type MainnetExecutionPayload = ExecutionPayload<MainnetEthSpec>;
 
 /// Intermediate representation with all fields already converted to lighthouse types.
 ///
