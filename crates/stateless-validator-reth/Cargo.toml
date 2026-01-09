@@ -13,12 +13,22 @@ anyhow = { workspace = true, optional = true }
 once_cell.workspace = true
 serde.workspace = true
 
+# alloy
+alloy-eips = { workspace = true, optional = true }
+alloy-genesis = { workspace = true, optional = true }
+alloy-primitives = { workspace = true, optional = true }
+alloy-rlp = { workspace = true, optional = true }
+
 # reth
 reth-chainspec.workspace = true
 reth-ethereum-primitives.workspace = true
 reth-evm-ethereum.workspace = true
 reth-primitives-traits.workspace = true
 reth-stateless.workspace = true
+
+# lighthouse
+lighthouse-types = { workspace = true, optional = true }
+tree_hash = { workspace = true, optional = true }
 
 # mpt
 sparsestate.workspace = true
@@ -39,4 +49,15 @@ k256 = ["reth-stateless/k256"]
 secp256k1 = ["reth-stateless/secp256k1"]
 
 # host
-host = ["std", "stateless-validator-common/host", "dep:anyhow", "dep:ere-zkvm-interface"]
+host = [
+    "std",
+    "stateless-validator-common/host",
+    "dep:anyhow",
+    "dep:ere-zkvm-interface",
+    "dep:alloy-eips",
+    "dep:alloy-genesis",
+    "dep:alloy-primitives",
+    "dep:alloy-rlp",
+    "dep:lighthouse-types",
+    "dep:tree_hash",
+]

@@ -5,13 +5,37 @@ use alloc::{format, vec::Vec};
 use anyhow::Context;
 use ere_zkvm_interface::Input;
 use guest::{GuestIo, Io};
+use lighthouse_types::{ExecutionPayloadHeader, MainnetEthSpec};
 use reth_ethereum_primitives::TransactionSigned;
 use reth_stateless::UncompressedPublicKey;
+use tree_hash::TreeHash;
 
+use crate::execution_payload::to_execution_payload;
 use crate::guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput};
 
-#[rustfmt::skip]
-pub use stateless_validator_common::host::StatelessInput;
+pub use crate::execution_payload::to_execution_payload as to_execution_payload_reth;
+pub use reth_stateless::StatelessInput;
+pub use stateless_validator_common::guest::StatelessValidatorOutput;
+
+/// Constructs a [`StatelessValidatorOutput`] from [`StatelessInput`] and a success flag.
+pub fn output_from_stateless_input(
+    stateless_input: &StatelessInput,
+    success: bool,
+) -> StatelessValidatorOutput {
+    let payload = to_execution_payload(stateless_input);
+    let payload_header: ExecutionPayloadHeader<MainnetEthSpec> = payload.to_ref().into();
+    let _payload_header_hash = payload_header.tree_hash_root();
+
+    StatelessValidatorOutput::new(
+        stateless_input.block.hash_slow(),
+        stateless_input.block.parent_hash,
+        stateless_input
+            .block
+            .parent_beacon_block_root
+            .unwrap_or_default(),
+        success,
+    )
+}
 
 impl StatelessValidatorRethInput {
     /// Construct [`StatelessValidatorRethInput`] given [`StatelessInput`].

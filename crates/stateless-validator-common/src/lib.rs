@@ -2,6 +2,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
+pub mod execution_payload;
 pub mod guest;
 
 #[cfg(feature = "host")]

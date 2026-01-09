@@ -20,7 +20,7 @@ use crate::guest::{StatelessValidatorEthrexGuest, StatelessValidatorEthrexInput}
 #[rustfmt::skip]
 pub use {
     ethrex_guest_program::input::ProgramInput,
-    stateless_validator_common::host::StatelessInput,
+    reth_stateless::StatelessInput,
 };
 
 impl StatelessValidatorEthrexInput {
