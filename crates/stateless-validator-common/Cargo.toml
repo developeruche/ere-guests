@@ -13,8 +13,16 @@ rkyv = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 sha2 = { workspace = true, optional = true }
 
+# alloy
+alloy-genesis = { workspace = true, optional = true }
+alloy-primitives = { workspace = true, optional = true }
+alloy-rlp = { workspace = true, optional = true }
+alloy-eips = { workspace = true, optional = true }
+
 # reth
 reth-stateless = { workspace = true, optional = true }
+reth-primitives-traits = { workspace = true, optional = true }
+reth-ethereum-primitives = { workspace = true, optional = true }
 
 # lighthouse
 lighthouse-types.workspace = true
@@ -27,4 +35,14 @@ serde = ["dep:serde"]
 rkyv = ["dep:rkyv"]
 
 # host
-host = ["std", "dep:sha2", "dep:reth-stateless"]
+host = [
+    "std",
+    "dep:sha2",
+    "dep:reth-stateless",
+    "dep:alloy-genesis",
+    "dep:alloy-primitives",
+    "dep:alloy-rlp",
+    "dep:alloy-eips",
+    "dep:reth-primitives-traits",
+    "dep:reth-ethereum-primitives",
+]
