@@ -26,6 +26,7 @@ reth-ethereum-primitives = { workspace = true, optional = true }
 
 # lighthouse
 lighthouse-types.workspace = true
+tree_hash = { workspace = true, optional = true }
 
 [features]
 # guest
@@ -38,6 +39,7 @@ rkyv = ["dep:rkyv"]
 host = [
     "std",
     "dep:sha2",
+    "dep:tree_hash",
     "dep:reth-stateless",
     "dep:alloy-genesis",
     "dep:alloy-primitives",

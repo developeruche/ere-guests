@@ -4,11 +4,12 @@ use alloy_genesis::ChainConfig;
 use lighthouse_types::{
     Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload,
     ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
-    ExecutionPayloadElectra, FixedVector, ForkName, Hash256, MainnetEthSpec, Transactions, Uint256,
-    VariableList, Withdrawal, Withdrawals,
+    ExecutionPayloadElectra, ExecutionPayloadHeader, FixedVector, ForkName, Hash256,
+    MainnetEthSpec, Transactions, Uint256, VariableList, Withdrawal, Withdrawals,
 };
 use reth_primitives_traits::Block;
 use sha2::{Digest, Sha256};
+use tree_hash::TreeHash;
 
 use crate::guest::StatelessValidatorOutput;
 
@@ -244,23 +245,14 @@ impl StatelessValidatorOutput {
     /// Constructs a output from [`StatelessInput`] and an bool indicating
     /// whehter the stateless validation is successful or not.
     pub fn from_stateless_input(stateless_input: &StatelessInput, success: bool) -> Self {
-        Self::new(
-            stateless_input.block.hash_slow(),
-            stateless_input.block.parent_hash,
-            stateless_input
-                .block
-                .parent_beacon_block_root
-                .unwrap_or_default(),
-            success,
-        )
-    }
+        let payload = to_execution_payload(stateless_input);
+        let payload_header: ExecutionPayloadHeader<MainnetEthSpec> = payload.to_ref().into();
+        let payload_header_hash = payload_header.tree_hash_root();
 
-    /// Constructs a output from [`StatelessInput`] and an bool indicating
-    /// whehter the stateless validation is successful or not.
-    ///
-    /// This variant uses lighthouse types for ExecutionPayload conversion.
-    pub fn from_stateless_input2(stateless_input: &StatelessInput, success: bool) -> Self {
-        let _payload = to_execution_payload(stateless_input);
+        let beacon_root = stateless_input
+            .block
+            .parent_beacon_block_root
+            .unwrap_or_default();
 
         Self::new(
             stateless_input.block.hash_slow(),

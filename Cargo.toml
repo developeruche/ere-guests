@@ -75,6 +75,7 @@ ethrex-vm = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d70854
 
 # lighthouse
 lighthouse-types = { git = "https://github.com/sigp/lighthouse/", tag = "v8.0.1", package = "types" }
+tree_hash = "0.10.0"
 
 # ssz
 ethereum_ssz = "0.9"
