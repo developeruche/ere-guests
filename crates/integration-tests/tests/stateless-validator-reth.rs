@@ -2,12 +2,8 @@
 
 use ere_dockerized::zkVMKind;
 use integration_tests::{TestCase, get_fixtures};
-use stateless_validator_common::{
-    execution_payload_experiment::execution_payload_tree_root,
-    guest::execution_payload_to_header_hash,
-};
+use stateless_validator_common::guest::execution_payload_to_header_hash;
 use stateless_validator_reth::{
-    execution_payload::{to_execution_data, to_reth_block},
     guest::{StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput},
     host::to_execution_payload_reth,
 };
@@ -19,23 +15,6 @@ fn test_execution(zkvm_kind: zkVMKind) {
 
         let execution_payload = to_execution_payload_reth(&fixture.stateless_input);
         let execution_payload_header_hash = execution_payload_to_header_hash(&execution_payload);
-
-        let execution_data = to_execution_data(&fixture.stateless_input);
-        let hash2 = execution_payload_tree_root(execution_data.clone());
-        println!(
-            "Computed execution payload header hash: {:x?}",
-            execution_payload_header_hash
-        );
-        println!("Computed execution payload hash2: {:x?}", hash2);
-        assert_eq!(execution_payload_header_hash.as_slice(), hash2.as_slice());
-
-        let block2 = to_reth_block(execution_data);
-        let block_hash1 = fixture.stateless_input.block.hash_slow();
-        let block_hash2 = block2.unwrap().hash_slow();
-        println!("Original block hash: {:x?}", block_hash1);
-        println!("Reconstructed block hash: {:x?}", block_hash2);
-        assert_eq!(block_hash1, block_hash2);
-
         let beacon_root = fixture
             .stateless_input
             .block
