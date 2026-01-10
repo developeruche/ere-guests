@@ -8,6 +8,7 @@ use alloy_primitives::{Bytes, U256};
 use alloy_rpc_types_engine::{
     CancunPayloadFields, ExecutionData, ExecutionPayload as AlloyExecutionPayload,
     ExecutionPayloadSidecar, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3,
+    PayloadError, PraguePayloadFields,
 };
 use lighthouse_types::{
     Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload, FixedVector,
@@ -210,7 +211,7 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
                 ExecutionPayloadSidecar::none(),
             )
         }
-        ForkName::Deneb | ForkName::Electra => {
+        ForkName::Deneb => {
             let withdrawals = body
                 .withdrawals
                 .as_ref()
@@ -244,6 +245,44 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
 
             (AlloyExecutionPayload::V3(v3), sidecar)
         }
+        ForkName::Electra => {
+            let withdrawals = body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.to_vec())
+                .unwrap_or_default();
+            let v3 = ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 {
+                    payload_inner: v1,
+                    withdrawals,
+                },
+                blob_gas_used: header.blob_gas_used.unwrap_or_default(),
+                excess_blob_gas: header.excess_blob_gas.unwrap_or_default(),
+            };
+
+            // Collect blob versioned hashes from all blob transactions
+            let versioned_hashes: Vec<_> = body
+                .transactions()
+                .filter_map(|tx| tx.blob_versioned_hashes())
+                .flatten()
+                .copied()
+                .collect();
+
+            let parent_beacon_block_root = stateless_input
+                .block
+                .parent_beacon_block_root
+                .unwrap_or_default();
+
+            let cancun_fields =
+                CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes);
+
+            // For Electra, include the requests_hash in the sidecar
+            let requests_hash = header.requests_hash.unwrap_or_default();
+            let prague_fields = PraguePayloadFields::new(requests_hash);
+            let sidecar = ExecutionPayloadSidecar::v4(cancun_fields, prague_fields);
+
+            (AlloyExecutionPayload::V3(v3), sidecar)
+        }
         // Handle future forks - default to latest known behavior
         _ => {
             panic!("Unsupported fork: {:?}", fork)
@@ -251,4 +290,14 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
     };
 
     ExecutionData { payload, sidecar }
+}
+
+/// Converts an [`ExecutionData`] into a reth [`Block`].
+///
+/// This uses alloy's built-in `try_into_block` method to decode the execution
+/// payload transactions and construct a block.
+pub fn to_reth_block(
+    execution_data: ExecutionData,
+) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>, PayloadError> {
+    execution_data.try_into_block()
 }
