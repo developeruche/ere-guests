@@ -3333,6 +3333,7 @@ dependencies = [
 name = "integration-tests"
 version = "0.1.0"
 dependencies = [
+ "alloy-primitives",
  "block-encoding-length",
  "ere-dockerized",
  "ere-io",
@@ -3348,6 +3349,7 @@ dependencies = [
  "stateless-validator-ethrex",
  "stateless-validator-reth",
  "tar",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
 ]

@@ -1,20 +1,16 @@
 //! Execution tests for `block-encoding-length` guest program
 
-use std::fs;
-
 use block_encoding_length::guest::{
     BlockEncodingFormat, BlockEncodingLengthGuest, BlockEncodingLengthInput,
 };
 use ere_dockerized::zkVMKind;
-use integration_tests::{
-    TestCase, fixtures_dir, stateless_validator::StatelessValidatorFixture, untar_fixtures,
-};
+use integration_tests::{TestCase, get_fixtures};
 
 fn test_execution(zkvm_kind: zkVMKind) {
-    untar_fixtures().unwrap();
-    let path = fixtures_dir().join("block/rpc_block_22974575.json");
-    let fixture: StatelessValidatorFixture =
-        serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let mut fixtures = get_fixtures();
+    let fixture = fixtures
+        .find(|f| f.name == "rpc_block_22974575.json")
+        .expect("Fixture rpc_block_22974575.json not found");
     let block = fixture.stateless_input.block;
     let loop_count = 10;
     let test_cases = [BlockEncodingFormat::Rlp, BlockEncodingFormat::Ssz].map(|format| {

@@ -2,7 +2,7 @@
 
 use std::{
     fs::{self, File},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use ere_dockerized::{CompilerKind, DockerizedCompiler, DockerizedzkVM, zkVMKind};
@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 use tar::Archive;
 use tracing::info;
 use tracing_subscriber::EnvFilter;
+
+use crate::stateless_validator::StatelessValidatorFixture;
 
 pub mod stateless_validator;
 
@@ -32,7 +34,7 @@ pub fn fixtures_dir() -> PathBuf {
 }
 
 /// Unpack all fixtures in fixtures dir.
-pub fn untar_fixtures() -> std::io::Result<()> {
+pub fn untar_fixtures(target_dir: &Path) -> std::io::Result<()> {
     let fixtures_dir = fixtures_dir();
 
     for entry in fs::read_dir(&fixtures_dir)? {
@@ -41,11 +43,23 @@ pub fn untar_fixtures() -> std::io::Result<()> {
         if filename.is_some_and(|file_name| file_name.ends_with(".tar.gz")) {
             let file = File::open(&path)?;
             let gz = GzDecoder::new(file);
-            Archive::new(gz).unpack(&fixtures_dir)?;
+            Archive::new(gz).unpack(target_dir)?;
         }
     }
 
     Ok(())
+}
+
+/// Reads all stateless validator fixtures.
+pub fn get_fixtures() -> impl Iterator<Item = StatelessValidatorFixture> {
+    let dir = tempfile::tempdir().unwrap();
+    let dir_path = dir.path();
+    untar_fixtures(dir_path).unwrap();
+    fs::read_dir(dir_path.join("block")).unwrap().map(|file| {
+        let bytes = fs::read(file.unwrap().path()).unwrap();
+        let fixture: StatelessValidatorFixture = serde_json::from_slice(&bytes).unwrap();
+        fixture
+    })
 }
 
 /// Compiles guest program and initialize zkVM.

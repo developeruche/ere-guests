@@ -130,7 +130,7 @@ fn compute_withdrawals_root(withdrawals: &[Withdrawal]) -> Hash32 {
 ///
 /// This function converts the execution layer payload into a consensus layer
 /// header representation and computes its SSZ tree hash root.
-pub fn get_root(execution_data: ExecutionData) -> B256 {
+pub fn execution_payload_tree_root(execution_data: ExecutionData) -> B256 {
     match &execution_data.payload {
         ExecutionPayload::V1(v1) => {
             let transactions_root = compute_transactions_root(&v1.transactions);

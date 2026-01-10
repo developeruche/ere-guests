@@ -43,6 +43,7 @@ serde = { version = "1.0", default-features = false }
 serde_json = { version = "*", default-features = false }
 serde_with = { version = "3", default-features = false }
 sha2 = { version = "0.10.9", default-features = false }
+tempfile = { version = "3.6.0", default-features = false }
 
 # test
 flate2 = "1.1.5"
