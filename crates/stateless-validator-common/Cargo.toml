@@ -16,6 +16,17 @@ sha2 = { workspace = true, optional = true }
 # lighthouse
 lighthouse-types.workspace = true
 tree_hash.workspace = true
+tree_hash_derive.workspace = true
+ssz_types.workspace = true
+typenum.workspace = true
+
+# ssz
+ethereum_ssz.workspace = true
+ethereum_ssz_derive.workspace = true
+
+alloy-rpc-types-engine.workspace = true
+alloy-primitives.workspace = true
+alloy-eips.workspace = true
 
 [features]
 # guest
@@ -25,7 +36,4 @@ serde = ["dep:serde"]
 rkyv = ["dep:rkyv"]
 
 # host
-host = [
-    "std",
-    "dep:sha2",
-]
+host = ["std", "dep:sha2"]

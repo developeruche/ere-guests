@@ -55,6 +55,7 @@ tracing-subscriber = "0.3.22"
 alloy-consensus = { version = "1.1.2", default-features = false }
 alloy-eips = { version = "1.1.2", default-features = false }
 alloy-genesis = { version = "1.1.2", default-features = false }
+alloy-rpc-types-engine = { version = "1.1.2", default-features = false }
 alloy-primitives = { version = "1.4.1", default-features = false }
 alloy-rlp = { version = "0.3.10", default-features = false }
 alloy-trie = { version = "0.9.1", default-features = false }
@@ -79,6 +80,9 @@ lighthouse-types = { git = "https://github.com/jsign/lighthouse/", rev = "141e12
     "legacy-arith",
 ] }
 tree_hash = "0.10.0"
+tree_hash_derive = "0.10.0"
+ssz_types = { version = "0.11", default-features = false }
+typenum = { version = "1.18", default-features = false }
 
 # ssz
 ethereum_ssz = "0.9"
