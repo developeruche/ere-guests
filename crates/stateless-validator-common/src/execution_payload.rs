@@ -7,8 +7,7 @@ use lighthouse_types::{
     VariableList, Withdrawals,
 };
 
-// Type alias for the execution payload with MainnetEthSpec
-pub type MainnetExecutionPayload = ExecutionPayload<MainnetEthSpec>;
+type MainnetExecutionPayload = ExecutionPayload<MainnetEthSpec>;
 
 /// Intermediate representation with all fields already converted to lighthouse types.
 ///
