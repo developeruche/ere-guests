@@ -2,8 +2,8 @@
 
 use alloc::vec::Vec;
 
+use alloy_eips::Encodable2718;
 use alloy_genesis::ChainConfig;
-use alloy_rlp::Encodable;
 use lighthouse_types::{
     Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload, FixedVector,
     ForkName, Hash256, MainnetEthSpec, Transactions, Uint256, VariableList, Withdrawal,
@@ -79,7 +79,7 @@ fn convert_transactions<'a>(
     let encoded: Vec<_> = txs
         .map(|tx| {
             let mut buf = Vec::new();
-            tx.encode(&mut buf);
+            tx.encode_2718(&mut buf);
             VariableList::from(buf)
         })
         .collect();
