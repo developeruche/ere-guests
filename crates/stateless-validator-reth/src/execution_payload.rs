@@ -4,6 +4,11 @@ use alloc::vec::Vec;
 
 use alloy_eips::Encodable2718;
 use alloy_genesis::ChainConfig;
+use alloy_primitives::{Bytes, U256};
+use alloy_rpc_types_engine::{
+    CancunPayloadFields, ExecutionData, ExecutionPayload as AlloyExecutionPayload,
+    ExecutionPayloadSidecar, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3,
+};
 use lighthouse_types::{
     Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload, FixedVector,
     ForkName, Hash256, MainnetEthSpec, Transactions, Uint256, VariableList, Withdrawal,
@@ -143,4 +148,107 @@ fn execution_payload_fields_from_reth(stateless_input: &StatelessInput) -> Execu
 /// and block timestamp, then constructs the corresponding ExecutionPayload variant.
 pub fn to_execution_payload(stateless_input: &StatelessInput) -> ExecutionPayload<MainnetEthSpec> {
     execution_payload_fields_from_reth(stateless_input).into_payload()
+}
+
+/// Converts a [`StatelessInput`] to an alloy [`ExecutionData`].
+///
+/// This creates both the execution payload and the appropriate sidecar
+/// based on the fork (pre-Cancun, Cancun/Deneb, or Prague/Electra).
+pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
+    use alloy_consensus::transaction::Transaction;
+
+    let header = stateless_input.block.header();
+    let body = stateless_input.block.body();
+    let fork = determine_fork_name(&stateless_input.chain_config, header.timestamp);
+
+    // Convert transactions to RLP-encoded bytes
+    let transactions: Vec<Bytes> = body
+        .transactions()
+        .map(|tx| {
+            let mut buf = Vec::new();
+            tx.encode_2718(&mut buf);
+            buf.into()
+        })
+        .collect();
+
+    // Build the base V1 payload
+    let v1 = ExecutionPayloadV1 {
+        parent_hash: header.parent_hash,
+        fee_recipient: header.beneficiary,
+        state_root: header.state_root,
+        receipts_root: header.receipts_root,
+        logs_bloom: header.logs_bloom,
+        prev_randao: header.mix_hash,
+        block_number: header.number,
+        gas_limit: header.gas_limit,
+        gas_used: header.gas_used,
+        timestamp: header.timestamp,
+        extra_data: header.extra_data.clone(),
+        base_fee_per_gas: U256::from(header.base_fee_per_gas.unwrap_or_default()),
+        block_hash: stateless_input.block.hash_slow(),
+        transactions,
+    };
+
+    // Build payload and sidecar based on fork
+    let (payload, sidecar) = match fork {
+        ForkName::Bellatrix => (
+            AlloyExecutionPayload::V1(v1),
+            ExecutionPayloadSidecar::none(),
+        ),
+        ForkName::Capella => {
+            let withdrawals = body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.to_vec())
+                .unwrap_or_default();
+            let v2 = ExecutionPayloadV2 {
+                payload_inner: v1,
+                withdrawals,
+            };
+            (
+                AlloyExecutionPayload::V2(v2),
+                ExecutionPayloadSidecar::none(),
+            )
+        }
+        ForkName::Deneb | ForkName::Electra => {
+            let withdrawals = body
+                .withdrawals
+                .as_ref()
+                .map(|w| w.to_vec())
+                .unwrap_or_default();
+            let v3 = ExecutionPayloadV3 {
+                payload_inner: ExecutionPayloadV2 {
+                    payload_inner: v1,
+                    withdrawals,
+                },
+                blob_gas_used: header.blob_gas_used.unwrap_or_default(),
+                excess_blob_gas: header.excess_blob_gas.unwrap_or_default(),
+            };
+
+            // Collect blob versioned hashes from all blob transactions
+            let versioned_hashes: Vec<_> = body
+                .transactions()
+                .filter_map(|tx| tx.blob_versioned_hashes())
+                .flatten()
+                .copied()
+                .collect();
+
+            let parent_beacon_block_root = stateless_input
+                .block
+                .parent_beacon_block_root
+                .unwrap_or_default();
+
+            let cancun_fields =
+                CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes);
+            let sidecar = ExecutionPayloadSidecar::v3(cancun_fields);
+
+            (AlloyExecutionPayload::V3(v3), sidecar)
+        }
+        // Handle future forks - default to latest known behavior
+        _ => {
+            panic!("Unsupported fork: {:?}", fork)
+        }
+    };
+
+    ExecutionData { payload, sidecar }
 }

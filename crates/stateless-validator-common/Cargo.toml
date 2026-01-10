@@ -14,7 +14,10 @@ serde = { workspace = true, features = ["derive"], optional = true }
 sha2 = { workspace = true, optional = true }
 
 # lighthouse
-lighthouse-types.workspace = true
+lighthouse-types = { workspace = true, default-features = false, features = [
+    "fake_crypto",
+    "legacy-arith",
+] }
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
 ssz_types.workspace = true
@@ -37,3 +40,6 @@ rkyv = ["dep:rkyv"]
 
 # host
 host = ["std", "dep:sha2"]
+
+[patch.crates-io]
+ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "181896944365e4b76dd6407c2d679fb844165dd6" }

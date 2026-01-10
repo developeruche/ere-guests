@@ -103,3 +103,6 @@ block-encoding-length = { path = "crates/block-encoding-length", default-feature
 stateless-validator-common = { path = "crates/stateless-validator-common", default-features = false }
 stateless-validator-ethrex = { path = "crates/stateless-validator-ethrex", default-features = false }
 stateless-validator-reth = { path = "crates/stateless-validator-reth", default-features = false }
+
+[patch.crates-io]
+ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "181896944365e4b76dd6407c2d679fb844165dd6" }

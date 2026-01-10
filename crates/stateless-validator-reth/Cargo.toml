@@ -14,10 +14,12 @@ once_cell.workspace = true
 serde.workspace = true
 
 # alloy
+alloy-consensus = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-genesis = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rlp = { workspace = true }
+alloy-rpc-types-engine.workspace = true
 
 # reth
 reth-chainspec.workspace = true
