@@ -14,10 +14,10 @@ once_cell.workspace = true
 serde.workspace = true
 
 # alloy
-alloy-eips = { workspace = true, optional = true }
-alloy-genesis = { workspace = true, optional = true }
-alloy-primitives = { workspace = true, optional = true }
-alloy-rlp = { workspace = true, optional = true }
+alloy-eips = { workspace = true }
+alloy-genesis = { workspace = true }
+alloy-primitives = { workspace = true }
+alloy-rlp = { workspace = true }
 
 # reth
 reth-chainspec.workspace = true
@@ -27,7 +27,7 @@ reth-primitives-traits.workspace = true
 reth-stateless.workspace = true
 
 # lighthouse
-lighthouse-types = { workspace = true, optional = true }
+lighthouse-types = { workspace = true }
 tree_hash = { workspace = true, optional = true }
 
 # mpt
@@ -54,10 +54,5 @@ host = [
     "stateless-validator-common/host",
     "dep:anyhow",
     "dep:ere-zkvm-interface",
-    "dep:alloy-eips",
-    "dep:alloy-genesis",
-    "dep:alloy-primitives",
-    "dep:alloy-rlp",
-    "dep:lighthouse-types",
     "dep:tree_hash",
 ]
