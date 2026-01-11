@@ -12,7 +12,7 @@ use alloy_eips::eip4895::Withdrawal;
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types_engine::{ExecutionData, ExecutionPayload};
 use ssz_types::{FixedVector, VariableList};
-use tree_hash::TreeHash;
+use tree_hash::{BYTES_PER_CHUNK, Hash256, TreeHash, merkle_root, mix_in_length};
 use tree_hash_derive::TreeHash;
 
 // Type aliases for SSZ-compatible primitives that implement TreeHash
@@ -23,9 +23,11 @@ type ExtraData = VariableList<u8, typenum::U32>;
 type Uint256Bytes = [u8; 32];
 
 // SSZ list bounds from consensus specs
-type MaxBytesPerTransaction = typenum::U1073741824; // 2^30
-type MaxTransactionsPerPayload = typenum::U1048576; // 2^20
 type MaxWithdrawalsPerPayload = typenum::U16;
+
+// Constants for zero-copy transaction root computation
+const MAX_BYTES_PER_TRANSACTION: usize = 1 << 30; // 2^30
+const MAX_TRANSACTIONS_PER_PAYLOAD: usize = 1 << 20; // 2^20
 
 /// ExecutionPayloadHeader for Bellatrix (no withdrawals, no blob gas).
 #[derive(Debug, Clone, TreeHash)]
@@ -98,16 +100,27 @@ struct SszWithdrawal {
 }
 
 /// Computes the SSZ tree hash root of the transactions list.
+///
+/// This implementation avoids copying transaction bytes by computing the tree hash
+/// directly from borrowed slices using `tree_hash::merkle_root`.
 fn compute_transactions_root(transactions: &[Bytes]) -> Hash32 {
-    type Transaction = VariableList<u8, MaxBytesPerTransaction>;
-    type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
+    // For each transaction (List<uint8, MAX_BYTES_PER_TRANSACTION>):
+    // tree_hash = mix_in_length(merkle_root(bytes, limit/32), len)
+    let tx_leaf_limit = MAX_BYTES_PER_TRANSACTION / BYTES_PER_CHUNK;
 
-    let txs: Vec<Transaction> = transactions
+    let tx_roots: Vec<Hash256> = transactions
         .iter()
-        .map(|tx| VariableList::from(tx.to_vec()))
+        .map(|tx| {
+            let root = merkle_root(tx.as_ref(), tx_leaf_limit);
+            mix_in_length(&root, tx.len())
+        })
         .collect();
-    let list = Transactions::from(txs);
-    list.tree_hash_root().0
+
+    // For the outer list (List<Transaction, MAX_TRANSACTIONS_PER_PAYLOAD>):
+    // Concatenate the 32-byte roots and merkleize with the list limit
+    let roots_bytes: Vec<u8> = tx_roots.iter().flat_map(|h| h.0).collect();
+    let list_root = merkle_root(&roots_bytes, MAX_TRANSACTIONS_PER_PAYLOAD);
+    mix_in_length(&list_root, transactions.len()).0
 }
 
 /// Computes the SSZ tree hash root of the withdrawals list.
