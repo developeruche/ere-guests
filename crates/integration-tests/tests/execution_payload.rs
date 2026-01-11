@@ -8,8 +8,9 @@ use std::collections::HashMap;
 
 use alloy_primitives::{B256, b256};
 use integration_tests::get_fixtures;
-use stateless_validator_common::execution_payload_experiment::execution_payload_tree_root;
-use stateless_validator_reth::execution_payload::{to_execution_data, to_reth_block};
+use stateless_validator_reth::execution_payload::{
+    execution_payload_tree_root, to_execution_data, execution_data_to_block,
+};
 
 /// Verify that StatelessInput is converted to ExecutionPayload correctly against precomputed roots.
 /// This verifies that StatelessInput -> ExecutionData -> ExecutionPaylaod is correct.
@@ -39,7 +40,7 @@ fn test_block_rountrip() {
         let execution_data = to_execution_data(&fixture.stateless_input);
 
         // In the guest, reconstruct the block from ExecutionData.
-        let guest_block = to_reth_block(execution_data).unwrap();
+        let guest_block = execution_data_to_block(execution_data).unwrap();
 
         // Assert that the reconstructed block matches the original block in StatelessInput.
         let guest_block_hash = guest_block.hash_slow();

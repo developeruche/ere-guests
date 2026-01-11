@@ -27,7 +27,6 @@ typenum.workspace = true
 ethereum_ssz.workspace = true
 ethereum_ssz_derive.workspace = true
 
-alloy-rpc-types-engine.workspace = true
 alloy-primitives.workspace = true
 alloy-eips.workspace = true
 

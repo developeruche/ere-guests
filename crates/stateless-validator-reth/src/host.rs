@@ -6,16 +6,14 @@ use anyhow::Context;
 use ere_zkvm_interface::Input;
 use guest::{GuestIo, Io};
 use reth_ethereum_primitives::TransactionSigned;
+pub use reth_stateless::StatelessInput;
 use reth_stateless::UncompressedPublicKey;
+pub use stateless_validator_common::guest::StatelessValidatorOutput;
 
 use crate::{
     execution_payload::to_execution_data,
     guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput},
 };
-
-pub use crate::execution_payload::to_execution_payload as to_execution_payload_reth;
-pub use reth_stateless::StatelessInput;
-pub use stateless_validator_common::guest::StatelessValidatorOutput;
 
 impl StatelessValidatorRethInput {
     /// Construct [`StatelessValidatorRethInput`] given [`StatelessInput`].

@@ -4,8 +4,6 @@ use alloc::{format, sync::Arc, vec::Vec};
 
 use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionData;
-
-use crate::serde_bincode_compat::ExecutionDataCompat;
 use ere_io::serde::{IoSerde, bincode::BincodeLegacy};
 use reth_chainspec::ChainSpec;
 use reth_evm_ethereum::EthEvmConfig;
@@ -16,9 +14,11 @@ use reth_stateless::{
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sparsestate::SparseState;
-use stateless_validator_common::execution_payload_experiment::execution_payload_tree_root;
 
-use crate::execution_payload::to_reth_block;
+use crate::{
+    execution_payload::{execution_data_to_block, execution_payload_tree_root},
+    serde_bincode_compat::ExecutionDataCompat,
+};
 
 #[rustfmt::skip]
 pub use {
@@ -75,7 +75,7 @@ impl Guest for StatelessValidatorRethGuest {
                 };
                 let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
                 let evm_config = EthEvmConfig::new(chain_spec.clone());
-                let block_result = to_reth_block(input.execution_data);
+                let block_result = execution_data_to_block(input.execution_data);
                 (chain_spec, evm_config, block_result)
             });
         let block = match block_result {

@@ -15,17 +15,19 @@
 //! - `PraguePayloadFields` - contains `RequestsOrHash`
 
 use alloc::vec::Vec;
-use alloy_eips::eip4895::Withdrawal;
-use alloy_eips::eip7685::{Requests, RequestsOrHash};
-use alloy_primitives::{Address, Bloom, Bytes, B256, U256};
+
+use alloy_eips::{
+    eip4895::Withdrawal,
+    eip7685::{Requests, RequestsOrHash},
+};
+use alloy_primitives::{Address, B256, Bloom, Bytes, U256};
+pub use alloy_rpc_types_engine::ExecutionData;
 use alloy_rpc_types_engine::{
     CancunPayloadFields, ExecutionPayloadSidecar, ExecutionPayloadV1, ExecutionPayloadV2,
     ExecutionPayloadV3, PraguePayloadFields,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_with::{DeserializeAs, SerializeAs};
-
-pub use alloy_rpc_types_engine::ExecutionData;
 
 /// Bincode-compatible [`ExecutionData`] serde implementation.
 #[derive(Debug, Serialize, Deserialize)]

@@ -2,10 +2,9 @@
 
 use ere_dockerized::zkVMKind;
 use integration_tests::{TestCase, get_fixtures};
-use stateless_validator_common::guest::execution_payload_to_header_hash;
 use stateless_validator_reth::{
+    execution_payload::execution_payload_tree_root,
     guest::{StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput},
-    host::to_execution_payload_reth,
 };
 
 fn test_execution(zkvm_kind: zkVMKind) {
@@ -13,8 +12,7 @@ fn test_execution(zkvm_kind: zkVMKind) {
     let inputs = fixtures.into_iter().map(|fixture| {
         let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
 
-        let execution_payload = to_execution_payload_reth(&fixture.stateless_input);
-        let execution_payload_header_hash = execution_payload_to_header_hash(&execution_payload);
+        let execution_payload_header_hash = execution_payload_tree_root(&input.execution_data);
         let beacon_root = fixture
             .stateless_input
             .block

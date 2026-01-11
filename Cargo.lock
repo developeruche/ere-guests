@@ -6302,7 +6302,6 @@ version = "0.1.0"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
- "alloy-rpc-types-engine",
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "rkyv",
@@ -6362,8 +6361,10 @@ dependencies = [
  "serde",
  "serde_with",
  "sparsestate",
+ "ssz_types",
  "stateless-validator-common",
  "tree_hash",
+ "tree_hash_derive",
  "types",
 ]
 

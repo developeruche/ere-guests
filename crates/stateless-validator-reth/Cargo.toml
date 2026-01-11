@@ -34,7 +34,11 @@ reth-payload-validator.workspace = true
 
 # lighthouse
 lighthouse-types = { workspace = true }
-tree_hash = { workspace = true, optional = true }
+tree_hash = { workspace = true }
+tree_hash_derive.workspace = true
+
+# ssz
+ssz_types.workspace = true
 
 # mpt
 sparsestate.workspace = true
@@ -60,5 +64,4 @@ host = [
     "stateless-validator-common/host",
     "dep:anyhow",
     "dep:ere-zkvm-interface",
-    "dep:tree_hash",
 ]

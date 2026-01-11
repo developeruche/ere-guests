@@ -2,8 +2,6 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 
-extern crate alloc;
-
 pub mod execution_payload;
 pub mod execution_payload_experiment;
 pub mod guest;

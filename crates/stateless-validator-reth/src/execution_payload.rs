@@ -2,22 +2,24 @@
 
 use alloc::vec::Vec;
 
-use alloy_eips::Encodable2718;
+use alloy_eips::{Encodable2718, eip4895::Withdrawal};
 use alloy_genesis::ChainConfig;
-use alloy_primitives::{Bytes, U256};
+use alloy_primitives::{B256, Bytes, U256};
 use alloy_rpc_types_engine::{
-    CancunPayloadFields, ExecutionData, ExecutionPayload as AlloyExecutionPayload,
-    ExecutionPayloadSidecar, ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3,
-    PayloadError, PraguePayloadFields,
-};
-use lighthouse_types::{
-    Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload, FixedVector,
-    ForkName, Hash256, MainnetEthSpec, Transactions, Uint256, VariableList, Withdrawal,
-    Withdrawals,
+    CancunPayloadFields, ExecutionData, ExecutionPayload,
+    ExecutionPayload as AlloyExecutionPayload, ExecutionPayloadSidecar, ExecutionPayloadV1,
+    ExecutionPayloadV2, ExecutionPayloadV3, PayloadError, PraguePayloadFields,
 };
 use reth_primitives_traits::Block;
 use reth_stateless::StatelessInput;
-use stateless_validator_common::execution_payload::ExecutionPayloadFields;
+use ssz_types::{FixedVector, VariableList};
+use stateless_validator_common::execution_payload_experiment::{
+    Address20, ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
+    ExecutionPayloadHeaderDeneb, ForkName, Hash32, MAX_BYTES_PER_TRANSACTION,
+    MAX_TRANSACTIONS_PER_PAYLOAD, MaxWithdrawalsPerPayload,
+};
+use tree_hash::{BYTES_PER_CHUNK, Hash256, TreeHash, merkle_root, mix_in_length};
+use tree_hash_derive::TreeHash;
 
 /// Determines the fork name based on alloy chain config and block timestamp.
 fn determine_fork_name(chain_config: &ChainConfig, timestamp: u64) -> ForkName {
@@ -44,118 +46,12 @@ fn determine_fork_name(chain_config: &ChainConfig, timestamp: u64) -> ForkName {
     ForkName::Bellatrix
 }
 
-/// Converts alloy B256 to lighthouse Hash256.
-fn to_hash256(hash: alloy_primitives::B256) -> Hash256 {
-    Hash256::from_slice(hash.as_slice())
-}
-
-/// Converts alloy B256 to lighthouse ExecutionBlockHash.
-fn to_execution_block_hash(hash: alloy_primitives::B256) -> ExecutionBlockHash {
-    ExecutionBlockHash::from_root(to_hash256(hash))
-}
-
-/// Converts alloy Address to lighthouse Address.
-fn to_address(addr: alloy_primitives::Address) -> LighthouseAddress {
-    LighthouseAddress::from_slice(addr.as_slice())
-}
-
-/// Converts alloy U256 to lighthouse Uint256.
-fn to_uint256(value: alloy_primitives::U256) -> Uint256 {
-    Uint256::from_le_bytes(value.to_le_bytes::<32>())
-}
-
-/// Converts alloy Bloom to lighthouse FixedVector for logs bloom.
-fn to_logs_bloom(
-    bloom: &alloy_primitives::Bloom,
-) -> FixedVector<u8, <MainnetEthSpec as EthSpec>::BytesPerLogsBloom> {
-    FixedVector::from(bloom.as_slice().to_vec())
-}
-
-/// Converts alloy Bytes to lighthouse VariableList for extra data.
-fn to_extra_data(
-    data: &alloy_primitives::Bytes,
-) -> VariableList<u8, <MainnetEthSpec as EthSpec>::MaxExtraDataBytes> {
-    VariableList::from(data.to_vec())
-}
-
-/// Converts reth transactions to lighthouse Transactions format (RLP encoded).
-fn convert_transactions<'a>(
-    txs: impl Iterator<Item = &'a reth_ethereum_primitives::TransactionSigned>,
-) -> Transactions<MainnetEthSpec> {
-    let encoded: Vec<_> = txs
-        .map(|tx| {
-            let mut buf = Vec::new();
-            tx.encode_2718(&mut buf);
-            VariableList::from(buf)
-        })
-        .collect();
-    VariableList::from(encoded)
-}
-
-/// Converts alloy withdrawals to lighthouse Withdrawals.
-fn convert_withdrawals(
-    withdrawals: &[alloy_eips::eip4895::Withdrawal],
-) -> Withdrawals<MainnetEthSpec> {
-    let converted: Vec<_> = withdrawals
-        .iter()
-        .map(|w| Withdrawal {
-            index: w.index,
-            validator_index: w.validator_index,
-            address: to_address(w.address),
-            amount: w.amount,
-        })
-        .collect();
-    VariableList::from(converted)
-}
-
-/// Creates [`ExecutionPayloadFields`] from a reth [`StatelessInput`].
-fn execution_payload_fields_from_reth(stateless_input: &StatelessInput) -> ExecutionPayloadFields {
-    let header = stateless_input.block.header();
-    let body = stateless_input.block.body();
-    let fork = determine_fork_name(&stateless_input.chain_config, header.timestamp);
-
-    let withdrawals = body
-        .withdrawals
-        .as_ref()
-        .map(|w| convert_withdrawals(w.as_slice()));
-
-    ExecutionPayloadFields {
-        fork,
-        parent_hash: to_execution_block_hash(header.parent_hash),
-        fee_recipient: to_address(header.beneficiary),
-        state_root: to_hash256(header.state_root),
-        receipts_root: to_hash256(header.receipts_root),
-        logs_bloom: to_logs_bloom(&header.logs_bloom),
-        prev_randao: to_hash256(header.mix_hash),
-        block_number: header.number,
-        gas_limit: header.gas_limit,
-        gas_used: header.gas_used,
-        timestamp: header.timestamp,
-        extra_data: to_extra_data(&header.extra_data),
-        base_fee_per_gas: to_uint256(alloy_primitives::U256::from(
-            header.base_fee_per_gas.unwrap_or_default(),
-        )),
-        block_hash: to_execution_block_hash(stateless_input.block.hash_slow()),
-        transactions: convert_transactions(body.transactions()),
-        withdrawals,
-        blob_gas_used: header.blob_gas_used,
-        excess_blob_gas: header.excess_blob_gas,
-    }
-}
-
-/// Converts a [`StatelessInput`] to a lighthouse [`ExecutionPayload`].
-///
-/// This function determines the appropriate fork variant based on the chain config
-/// and block timestamp, then constructs the corresponding ExecutionPayload variant.
-pub fn to_execution_payload(stateless_input: &StatelessInput) -> ExecutionPayload<MainnetEthSpec> {
-    execution_payload_fields_from_reth(stateless_input).into_payload()
-}
-
 /// Converts a [`StatelessInput`] to an alloy [`ExecutionData`].
 ///
 /// This creates both the execution payload and the appropriate sidecar
 /// based on the fork (pre-Cancun, Cancun/Deneb, or Prague/Electra).
 pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
+    // TODO: move to host.rs?
     use alloy_consensus::transaction::Transaction;
 
     let header = stateless_input.block.header();
@@ -283,10 +179,6 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
 
             (AlloyExecutionPayload::V3(v3), sidecar)
         }
-        // Handle future forks - default to latest known behavior
-        _ => {
-            panic!("Unsupported fork: {:?}", fork)
-        }
     };
 
     ExecutionData { payload, sidecar }
@@ -296,8 +188,137 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
 ///
 /// This uses alloy's built-in `try_into_block` method to decode the execution
 /// payload transactions and construct a block.
-pub fn to_reth_block(
+pub fn execution_data_to_block(
     execution_data: ExecutionData,
 ) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>, PayloadError> {
     execution_data.try_into_block()
+}
+
+/// Computes the tree_hash_root of ExecutionPayloadHeader from ExecutionData.
+///
+/// This function converts the execution layer payload into a consensus layer
+/// header representation and computes its SSZ tree hash root.
+pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
+    match &execution_data.payload {
+        ExecutionPayload::V1(v1) => {
+            let transactions_root = compute_transactions_root(&v1.transactions);
+            let header = ExecutionPayloadHeaderBellatrix {
+                parent_hash: v1.parent_hash.0,
+                fee_recipient: v1.fee_recipient.0.0,
+                state_root: v1.state_root.0,
+                receipts_root: v1.receipts_root.0,
+                logs_bloom: FixedVector::from(v1.logs_bloom.0.to_vec()),
+                prev_randao: v1.prev_randao.0,
+                block_number: v1.block_number,
+                gas_limit: v1.gas_limit,
+                gas_used: v1.gas_used,
+                timestamp: v1.timestamp,
+                extra_data: VariableList::from(v1.extra_data.to_vec()),
+                base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
+                block_hash: v1.block_hash.0,
+                transactions_root,
+            };
+            B256::from(header.tree_hash_root().0)
+        }
+        ExecutionPayload::V2(v2) => {
+            // V2 is nested: v2.payload_inner contains V1 fields
+            let v1 = &v2.payload_inner;
+            let transactions_root = compute_transactions_root(&v1.transactions);
+            let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
+            let header = ExecutionPayloadHeaderCapella {
+                parent_hash: v1.parent_hash.0,
+                fee_recipient: v1.fee_recipient.0.0,
+                state_root: v1.state_root.0,
+                receipts_root: v1.receipts_root.0,
+                logs_bloom: FixedVector::from(v1.logs_bloom.0.to_vec()),
+                prev_randao: v1.prev_randao.0,
+                block_number: v1.block_number,
+                gas_limit: v1.gas_limit,
+                gas_used: v1.gas_used,
+                timestamp: v1.timestamp,
+                extra_data: VariableList::from(v1.extra_data.to_vec()),
+                base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
+                block_hash: v1.block_hash.0,
+                transactions_root,
+                withdrawals_root,
+            };
+            B256::from(header.tree_hash_root().0)
+        }
+        ExecutionPayload::V3(v3) => {
+            // V3 is doubly nested: v3.payload_inner.payload_inner contains V1 fields
+            let v2 = &v3.payload_inner;
+            let v1 = &v2.payload_inner;
+            let transactions_root = compute_transactions_root(&v1.transactions);
+            let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
+            let header = ExecutionPayloadHeaderDeneb {
+                parent_hash: v1.parent_hash.0,
+                fee_recipient: v1.fee_recipient.0.0,
+                state_root: v1.state_root.0,
+                receipts_root: v1.receipts_root.0,
+                logs_bloom: FixedVector::from(v1.logs_bloom.0.to_vec()),
+                prev_randao: v1.prev_randao.0,
+                block_number: v1.block_number,
+                gas_limit: v1.gas_limit,
+                gas_used: v1.gas_used,
+                timestamp: v1.timestamp,
+                extra_data: VariableList::from(v1.extra_data.to_vec()),
+                base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
+                block_hash: v1.block_hash.0,
+                transactions_root,
+                withdrawals_root,
+                blob_gas_used: v3.blob_gas_used,
+                excess_blob_gas: v3.excess_blob_gas,
+            };
+            B256::from(header.tree_hash_root().0)
+        }
+    }
+}
+
+/// SSZ Withdrawal container for tree hash computation.
+#[derive(Debug, Clone, TreeHash)]
+struct SszWithdrawal {
+    index: u64,
+    validator_index: u64,
+    address: Address20,
+    amount: u64,
+}
+
+/// Computes the SSZ tree hash root of the transactions list.
+///
+/// This implementation avoids copying transaction bytes by computing the tree hash
+/// directly from borrowed slices using `tree_hash::merkle_root`.
+fn compute_transactions_root(transactions: &[Bytes]) -> Hash32 {
+    // For each transaction (List<uint8, MAX_BYTES_PER_TRANSACTION>):
+    // tree_hash = mix_in_length(merkle_root(bytes, limit/32), len)
+    let tx_leaf_limit = MAX_BYTES_PER_TRANSACTION / BYTES_PER_CHUNK;
+
+    let tx_roots: Vec<Hash256> = transactions
+        .iter()
+        .map(|tx| {
+            let root = merkle_root(tx.as_ref(), tx_leaf_limit);
+            mix_in_length(&root, tx.len())
+        })
+        .collect();
+
+    // For the outer list (List<Transaction, MAX_TRANSACTIONS_PER_PAYLOAD>):
+    // Concatenate the 32-byte roots and merkleize with the list limit
+    let roots_bytes: Vec<u8> = tx_roots.iter().flat_map(|h| h.0).collect();
+    let list_root = merkle_root(&roots_bytes, MAX_TRANSACTIONS_PER_PAYLOAD);
+    mix_in_length(&list_root, transactions.len()).0
+}
+
+/// Computes the SSZ tree hash root of the withdrawals list.
+fn compute_withdrawals_root(withdrawals: &[Withdrawal]) -> Hash32 {
+    type Withdrawals = VariableList<SszWithdrawal, MaxWithdrawalsPerPayload>;
+
+    let list: Vec<SszWithdrawal> = withdrawals
+        .iter()
+        .map(|w| SszWithdrawal {
+            index: w.index,
+            validator_index: w.validator_index,
+            address: w.address.0.0,
+            amount: w.amount,
+        })
+        .collect();
+    Withdrawals::from(list).tree_hash_root().0
 }

@@ -1,8 +1,5 @@
 //! Stateless validator common types and utilities for guest.
 
-use lighthouse_types::{ExecutionPayload, ExecutionPayloadHeader, MainnetEthSpec};
-use tree_hash::TreeHash;
-
 /// Static size of [`StatelessValidatorOutput`].
 pub const STATELESS_VALIDATOR_OUTPUT_SIZE: usize = size_of::<StatelessValidatorOutput>();
 
@@ -44,13 +41,4 @@ impl StatelessValidatorOutput {
         buf[64] = self.successful_block_validation as u8;
         buf
     }
-}
-
-/// Computes the execution payload header hash from the execution payload.
-pub fn execution_payload_to_header_hash(
-    execution_payload: &ExecutionPayload<MainnetEthSpec>,
-) -> [u8; 32] {
-    let execution_payload_header: ExecutionPayloadHeader<MainnetEthSpec> =
-        execution_payload.to_ref().into();
-    execution_payload_header.tree_hash_root().into()
 }

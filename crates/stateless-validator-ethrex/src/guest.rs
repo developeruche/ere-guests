@@ -2,7 +2,6 @@
 
 use alloc::format;
 use core::fmt::Debug;
-use stateless_validator_common::guest::execution_payload_to_header_hash;
 
 use ere_io::rkyv::{
     IoRkyv,
@@ -92,8 +91,10 @@ impl Guest for StatelessValidatorEthrexGuest {
                     &input.blocks[0],
                     &input.execution_witness.chain_config,
                 );
-                let execution_payload_header_hash =
-                    execution_payload_to_header_hash(&execution_payload);
+                // TODO
+                // let execution_payload_header_hash =
+                //     execution_payload_to_header_hash(&execution_payload);
+                let execution_payload_header_hash = [0u8; 32];
                 let beacon_root = input.blocks[0]
                     .header
                     .parent_beacon_block_root
