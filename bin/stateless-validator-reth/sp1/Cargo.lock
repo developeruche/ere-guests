@@ -4145,6 +4145,7 @@ dependencies = [
  "sparsestate",
  "ssz_types",
  "stateless-validator-common",
+ "tree_hash",
  "tree_hash_derive",
  "types",
 ]

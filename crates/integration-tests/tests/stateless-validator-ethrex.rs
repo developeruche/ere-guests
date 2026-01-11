@@ -5,7 +5,9 @@ use integration_tests::{TestCase, get_fixtures};
 use stateless_validator_ethrex::guest::{
     StatelessValidatorEthrexGuest, StatelessValidatorEthrexInput, StatelessValidatorOutput,
 };
-use stateless_validator_reth::execution_payload::{execution_payload_tree_root, to_execution_data};
+use stateless_validator_reth::{
+    execution_payload::execution_payload_tree_root, host::to_execution_data,
+};
 
 fn test_execution(zkvm_kind: zkVMKind) {
     let fixtures = get_fixtures();

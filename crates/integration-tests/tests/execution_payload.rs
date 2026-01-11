@@ -8,8 +8,9 @@ use std::collections::HashMap;
 
 use alloy_primitives::{B256, b256};
 use integration_tests::get_fixtures;
-use stateless_validator_reth::execution_payload::{
-    execution_payload_tree_root, to_execution_data, execution_data_to_block,
+use stateless_validator_reth::{
+    execution_payload::{execution_data_to_block, execution_payload_tree_root},
+    host::to_execution_data,
 };
 
 /// Verify that StatelessInput is converted to ExecutionPayload correctly against precomputed roots.
