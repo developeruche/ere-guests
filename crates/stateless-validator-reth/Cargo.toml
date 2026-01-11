@@ -12,6 +12,7 @@ workspace = true
 anyhow = { workspace = true, optional = true }
 once_cell.workspace = true
 serde.workspace = true
+serde_with.workspace = true
 
 # alloy
 alloy-consensus = { workspace = true }
@@ -19,7 +20,9 @@ alloy-eips = { workspace = true }
 alloy-genesis = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rlp = { workspace = true }
-alloy-rpc-types-engine.workspace = true
+alloy-rpc-types-engine = { workspace = true, default-features = false, features = [
+    "serde",
+] }
 
 # reth
 reth-chainspec.workspace = true
@@ -27,6 +30,7 @@ reth-ethereum-primitives.workspace = true
 reth-evm-ethereum.workspace = true
 reth-primitives-traits.workspace = true
 reth-stateless.workspace = true
+reth-payload-validator.workspace = true
 
 # lighthouse
 lighthouse-types = { workspace = true }

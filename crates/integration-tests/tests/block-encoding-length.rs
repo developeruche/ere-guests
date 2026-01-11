@@ -7,8 +7,9 @@ use ere_dockerized::zkVMKind;
 use integration_tests::{TestCase, get_fixtures};
 
 fn test_execution(zkvm_kind: zkVMKind) {
-    let mut fixtures = get_fixtures();
+    let fixtures = get_fixtures();
     let fixture = fixtures
+        .into_iter()
         .find(|f| f.name == "rpc_block_22974575.json")
         .expect("Fixture rpc_block_22974575.json not found");
     let block = fixture.stateless_input.block;

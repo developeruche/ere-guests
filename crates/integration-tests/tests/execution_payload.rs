@@ -21,7 +21,7 @@ fn test_stateless_input_to_execution_payload() {
         let expected_root = *expected_roots.get(&block_hash).unwrap();
 
         let execution_data = to_execution_data(&fixture.stateless_input);
-        let execution_payload_tree_root = execution_payload_tree_root(execution_data.clone());
+        let execution_payload_tree_root = execution_payload_tree_root(&execution_data);
 
         assert_eq!(
             execution_payload_tree_root, expected_root,

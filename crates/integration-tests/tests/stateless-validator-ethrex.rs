@@ -10,7 +10,7 @@ use stateless_validator_reth::host::to_execution_payload_reth;
 
 fn test_execution(zkvm_kind: zkVMKind) {
     let fixtures = get_fixtures();
-    let inputs = fixtures.map(|fixture| {
+    let inputs = fixtures.into_iter().map(|fixture| {
         let input = StatelessValidatorEthrexInput::new(&fixture.stateless_input).unwrap();
 
         let execution_payload = to_execution_payload_reth(&fixture.stateless_input);

@@ -51,15 +51,18 @@ pub fn untar_fixtures(target_dir: &Path) -> std::io::Result<()> {
 }
 
 /// Reads all stateless validator fixtures.
-pub fn get_fixtures() -> impl Iterator<Item = StatelessValidatorFixture> {
+pub fn get_fixtures() -> Vec<StatelessValidatorFixture> {
     let dir = tempfile::tempdir().unwrap();
     let dir_path = dir.path();
     untar_fixtures(dir_path).unwrap();
-    fs::read_dir(dir_path.join("block")).unwrap().map(|file| {
-        let bytes = fs::read(file.unwrap().path()).unwrap();
-        let fixture: StatelessValidatorFixture = serde_json::from_slice(&bytes).unwrap();
-        fixture
-    })
+    fs::read_dir(dir_path.join("block"))
+        .unwrap()
+        .map(|file| {
+            let bytes = fs::read(file.unwrap().path()).unwrap();
+            let fixture: StatelessValidatorFixture = serde_json::from_slice(&bytes).unwrap();
+            fixture
+        })
+        .collect()
 }
 
 /// Compiles guest program and initialize zkVM.

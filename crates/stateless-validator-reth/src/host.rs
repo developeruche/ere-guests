@@ -8,7 +8,10 @@ use guest::{GuestIo, Io};
 use reth_ethereum_primitives::TransactionSigned;
 use reth_stateless::UncompressedPublicKey;
 
-use crate::guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput};
+use crate::{
+    execution_payload::to_execution_data,
+    guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput},
+};
 
 pub use crate::execution_payload::to_execution_payload as to_execution_payload_reth;
 pub use reth_stateless::StatelessInput;
@@ -17,10 +20,13 @@ pub use stateless_validator_common::guest::StatelessValidatorOutput;
 impl StatelessValidatorRethInput {
     /// Construct [`StatelessValidatorRethInput`] given [`StatelessInput`].
     pub fn new(stateless_input: &StatelessInput) -> anyhow::Result<Self> {
+        let execution_data = to_execution_data(stateless_input);
         let signers = recover_signers(&stateless_input.block.body.transactions)?;
 
         Ok(Self {
-            stateless_input: stateless_input.clone(),
+            execution_data,
+            witness: stateless_input.witness.clone(),
+            chain_config: stateless_input.chain_config.clone(),
             public_keys: signers,
         })
     }
