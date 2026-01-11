@@ -4,6 +4,8 @@ use alloc::{format, sync::Arc, vec::Vec};
 
 use alloy_genesis::ChainConfig;
 use alloy_rpc_types_engine::ExecutionData;
+
+use crate::serde_bincode_compat::ExecutionDataCompat;
 use ere_io::serde::{IoSerde, bincode::BincodeLegacy};
 use reth_chainspec::ChainSpec;
 use reth_evm_ethereum::EthEvmConfig;
@@ -29,6 +31,7 @@ pub use {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatelessValidatorRethInput {
     /// Execution data from the beacon block.
+    #[serde_as(as = "ExecutionDataCompat")]
     pub execution_data: ExecutionData,
     /// Execution witness for the EL block.
     pub witness: ExecutionWitness,
