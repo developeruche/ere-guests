@@ -28,9 +28,6 @@ ethrex-vm.workspace = true
 # reth
 reth-stateless = { workspace = true, optional = true }
 
-# lighthouse
-lighthouse-types = { workspace = true }
-
 # ere
 ere-io = { workspace = true, features = ["rkyv"] }
 ere-zkvm-interface = { workspace = true, optional = true }

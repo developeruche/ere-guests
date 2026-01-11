@@ -6,7 +6,5 @@ extern crate alloc;
 
 pub mod guest;
 
-pub mod execution_payload;
-
 #[cfg(feature = "host")]
 pub mod host;

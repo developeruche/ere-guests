@@ -33,7 +33,6 @@ reth-stateless.workspace = true
 reth-payload-validator.workspace = true
 
 # lighthouse
-lighthouse-types = { workspace = true }
 tree_hash = { workspace = true }
 tree_hash_derive.workspace = true
 

@@ -14,10 +14,6 @@ serde = { workspace = true, features = ["derive"], optional = true }
 sha2 = { workspace = true, optional = true }
 
 # lighthouse
-lighthouse-types = { workspace = true, default-features = false, features = [
-    "fake_crypto",
-    "legacy-arith",
-] }
 tree_hash.workspace = true
 tree_hash_derive.workspace = true
 ssz_types.workspace = true

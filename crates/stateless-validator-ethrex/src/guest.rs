@@ -10,8 +10,6 @@ use ere_io::rkyv::{
 use ethrex_common::types::block_execution_witness::ExecutionWitness;
 use ethrex_guest_program::{execution::execution_program, input::ProgramInput};
 
-use crate::execution_payload::to_execution_payload_ethrex;
-
 #[rustfmt::skip]
 pub use {
     guest::*,
@@ -87,10 +85,10 @@ impl Guest for StatelessValidatorEthrexGuest {
 
         let (execution_payload_header_hash, beacon_root) =
             P::cycle_scope("public_inputs_preparation", || {
-                let execution_payload = to_execution_payload_ethrex(
-                    &input.blocks[0],
-                    &input.execution_witness.chain_config,
-                );
+                // let execution_payload = to_execution_payload_ethrex(
+                //     &input.blocks[0],
+                //     &input.execution_witness.chain_config,
+                // );
                 // TODO
                 // let execution_payload_header_hash =
                 //     execution_payload_to_header_hash(&execution_payload);

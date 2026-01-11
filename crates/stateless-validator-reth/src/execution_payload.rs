@@ -7,7 +7,7 @@ use alloy_genesis::ChainConfig;
 use alloy_primitives::{B256, Bytes};
 use alloy_rpc_types_engine::{ExecutionData, ExecutionPayload, PayloadError};
 use ssz_types::{FixedVector, VariableList};
-use stateless_validator_common::execution_payload_experiment::{
+use stateless_validator_common::execution_payload::{
     Address20, ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
     ExecutionPayloadHeaderDeneb, ForkName, Hash32, MAX_BYTES_PER_TRANSACTION,
     MAX_TRANSACTIONS_PER_PAYLOAD, MaxWithdrawalsPerPayload,

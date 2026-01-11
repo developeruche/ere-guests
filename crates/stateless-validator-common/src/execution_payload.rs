@@ -1,138 +1,94 @@
-//! ExecutionPayload construction utilities.
+//! Experimental ExecutionPayloadHeader tree hash computation from ExecutionData.
+//!
+//! This module provides functionality to compute the SSZ tree hash root of an
+//! ExecutionPayloadHeader directly from alloy's ExecutionData type.
 
-use lighthouse_types::{
-    Address as LighthouseAddress, EthSpec, ExecutionBlockHash, ExecutionPayload,
-    ExecutionPayloadBellatrix, ExecutionPayloadCapella, ExecutionPayloadDeneb,
-    ExecutionPayloadElectra, FixedVector, ForkName, Hash256, MainnetEthSpec, Transactions, Uint256,
-    VariableList, Withdrawals,
-};
+// Allow missing docs for experimental module
+#![allow(missing_docs)]
 
-type MainnetExecutionPayload = ExecutionPayload<MainnetEthSpec>;
+use ssz_types::{FixedVector, VariableList};
+use tree_hash_derive::TreeHash;
 
-/// Intermediate representation with all fields already converted to lighthouse types.
-///
-/// This struct allows sharing the ExecutionPayload construction logic between
-/// different input formats (reth's `StatelessInput` and ethrex's `ProgramInput`).
-#[derive(Debug)]
-pub struct ExecutionPayloadFields {
-    /// The fork variant to construct.
-    pub fork: ForkName,
-    /// Parent block hash.
-    pub parent_hash: ExecutionBlockHash,
-    /// Fee recipient (coinbase/beneficiary).
-    pub fee_recipient: LighthouseAddress,
-    /// State root after block execution.
-    pub state_root: Hash256,
-    /// Receipts root.
-    pub receipts_root: Hash256,
-    /// Logs bloom filter.
-    pub logs_bloom: FixedVector<u8, <MainnetEthSpec as EthSpec>::BytesPerLogsBloom>,
-    /// Previous RANDAO value (mix hash).
-    pub prev_randao: Hash256,
-    /// Block number.
-    pub block_number: u64,
-    /// Gas limit.
-    pub gas_limit: u64,
-    /// Gas used.
-    pub gas_used: u64,
-    /// Block timestamp.
-    pub timestamp: u64,
-    /// Extra data.
-    pub extra_data: VariableList<u8, <MainnetEthSpec as EthSpec>::MaxExtraDataBytes>,
-    /// Base fee per gas.
-    pub base_fee_per_gas: Uint256,
-    /// Block hash.
-    pub block_hash: ExecutionBlockHash,
-    /// RLP-encoded transactions.
-    pub transactions: Transactions<MainnetEthSpec>,
-    /// Withdrawals (Capella+).
-    pub withdrawals: Option<Withdrawals<MainnetEthSpec>>,
-    /// Blob gas used (Deneb+).
-    pub blob_gas_used: Option<u64>,
-    /// Excess blob gas (Deneb+).
-    pub excess_blob_gas: Option<u64>,
+// Type aliases for SSZ-compatible primitives that implement TreeHash
+pub type Hash32 = [u8; 32];
+pub type Address20 = [u8; 20];
+pub type LogsBloom = FixedVector<u8, typenum::U256>;
+pub type ExtraData = VariableList<u8, typenum::U32>;
+pub type Uint256Bytes = [u8; 32];
+
+// SSZ list bounds from consensus specs
+pub type MaxWithdrawalsPerPayload = typenum::U16;
+
+// Constants for zero-copy transaction root computation
+pub const MAX_BYTES_PER_TRANSACTION: usize = 1 << 30; // 2^30
+pub const MAX_TRANSACTIONS_PER_PAYLOAD: usize = 1 << 20; // 2^20
+
+/// Enum representing different Ethereum fork names.
+#[derive(Debug, Clone, Copy)]
+pub enum ForkName {
+    Bellatrix,
+    Capella,
+    Deneb,
+    Electra,
 }
 
-impl ExecutionPayloadFields {
-    /// Converts the intermediate fields into an [`ExecutionPayload`].
-    ///
-    /// The fork variant determines which payload type is constructed.
-    pub fn into_payload(self) -> MainnetExecutionPayload {
-        match self.fork {
-            ForkName::Bellatrix => ExecutionPayload::Bellatrix(ExecutionPayloadBellatrix {
-                parent_hash: self.parent_hash,
-                fee_recipient: self.fee_recipient,
-                state_root: self.state_root,
-                receipts_root: self.receipts_root,
-                logs_bloom: self.logs_bloom,
-                prev_randao: self.prev_randao,
-                block_number: self.block_number,
-                gas_limit: self.gas_limit,
-                gas_used: self.gas_used,
-                timestamp: self.timestamp,
-                extra_data: self.extra_data,
-                base_fee_per_gas: self.base_fee_per_gas,
-                block_hash: self.block_hash,
-                transactions: self.transactions,
-            }),
-            ForkName::Capella => ExecutionPayload::Capella(ExecutionPayloadCapella {
-                parent_hash: self.parent_hash,
-                fee_recipient: self.fee_recipient,
-                state_root: self.state_root,
-                receipts_root: self.receipts_root,
-                logs_bloom: self.logs_bloom,
-                prev_randao: self.prev_randao,
-                block_number: self.block_number,
-                gas_limit: self.gas_limit,
-                gas_used: self.gas_used,
-                timestamp: self.timestamp,
-                extra_data: self.extra_data,
-                base_fee_per_gas: self.base_fee_per_gas,
-                block_hash: self.block_hash,
-                transactions: self.transactions,
-                withdrawals: self.withdrawals.unwrap_or_default(),
-            }),
-            ForkName::Deneb => ExecutionPayload::Deneb(ExecutionPayloadDeneb {
-                parent_hash: self.parent_hash,
-                fee_recipient: self.fee_recipient,
-                state_root: self.state_root,
-                receipts_root: self.receipts_root,
-                logs_bloom: self.logs_bloom,
-                prev_randao: self.prev_randao,
-                block_number: self.block_number,
-                gas_limit: self.gas_limit,
-                gas_used: self.gas_used,
-                timestamp: self.timestamp,
-                extra_data: self.extra_data,
-                base_fee_per_gas: self.base_fee_per_gas,
-                block_hash: self.block_hash,
-                transactions: self.transactions,
-                withdrawals: self.withdrawals.unwrap_or_default(),
-                blob_gas_used: self.blob_gas_used.unwrap_or_default(),
-                excess_blob_gas: self.excess_blob_gas.unwrap_or_default(),
-            }),
-            ForkName::Electra | ForkName::Fulu | ForkName::Gloas => {
-                ExecutionPayload::Electra(ExecutionPayloadElectra {
-                    parent_hash: self.parent_hash,
-                    fee_recipient: self.fee_recipient,
-                    state_root: self.state_root,
-                    receipts_root: self.receipts_root,
-                    logs_bloom: self.logs_bloom,
-                    prev_randao: self.prev_randao,
-                    block_number: self.block_number,
-                    gas_limit: self.gas_limit,
-                    gas_used: self.gas_used,
-                    timestamp: self.timestamp,
-                    extra_data: self.extra_data,
-                    base_fee_per_gas: self.base_fee_per_gas,
-                    block_hash: self.block_hash,
-                    transactions: self.transactions,
-                    withdrawals: self.withdrawals.unwrap_or_default(),
-                    blob_gas_used: self.blob_gas_used.unwrap_or_default(),
-                    excess_blob_gas: self.excess_blob_gas.unwrap_or_default(),
-                })
-            }
-            _ => panic!("unsupported fork: {}", self.fork),
-        }
-    }
+/// ExecutionPayloadHeader for Bellatrix (no withdrawals, no blob gas).
+#[derive(Debug, Clone, TreeHash)]
+pub struct ExecutionPayloadHeaderBellatrix {
+    pub parent_hash: Hash32,
+    pub fee_recipient: Address20,
+    pub state_root: Hash32,
+    pub receipts_root: Hash32,
+    pub logs_bloom: LogsBloom,
+    pub prev_randao: Hash32,
+    pub block_number: u64,
+    pub gas_limit: u64,
+    pub gas_used: u64,
+    pub timestamp: u64,
+    pub extra_data: ExtraData,
+    pub base_fee_per_gas: Uint256Bytes,
+    pub block_hash: Hash32,
+    pub transactions_root: Hash32,
+}
+
+/// ExecutionPayloadHeader for Capella (adds withdrawals_root).
+#[derive(Debug, Clone, TreeHash)]
+pub struct ExecutionPayloadHeaderCapella {
+    pub parent_hash: Hash32,
+    pub fee_recipient: Address20,
+    pub state_root: Hash32,
+    pub receipts_root: Hash32,
+    pub logs_bloom: LogsBloom,
+    pub prev_randao: Hash32,
+    pub block_number: u64,
+    pub gas_limit: u64,
+    pub gas_used: u64,
+    pub timestamp: u64,
+    pub extra_data: ExtraData,
+    pub base_fee_per_gas: Uint256Bytes,
+    pub block_hash: Hash32,
+    pub transactions_root: Hash32,
+    pub withdrawals_root: Hash32,
+}
+
+/// ExecutionPayloadHeader for Deneb (adds blob gas fields).
+#[derive(Debug, Clone, TreeHash)]
+pub struct ExecutionPayloadHeaderDeneb {
+    pub parent_hash: Hash32,
+    pub fee_recipient: Address20,
+    pub state_root: Hash32,
+    pub receipts_root: Hash32,
+    pub logs_bloom: LogsBloom,
+    pub prev_randao: Hash32,
+    pub block_number: u64,
+    pub gas_limit: u64,
+    pub gas_used: u64,
+    pub timestamp: u64,
+    pub extra_data: ExtraData,
+    pub base_fee_per_gas: Uint256Bytes,
+    pub block_hash: Hash32,
+    pub transactions_root: Hash32,
+    pub withdrawals_root: Hash32,
+    pub blob_gas_used: u64,
+    pub excess_blob_gas: u64,
 }

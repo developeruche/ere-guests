@@ -16,7 +16,7 @@ use reth_ethereum_primitives::TransactionSigned;
 use reth_primitives_traits::Block;
 pub use reth_stateless::StatelessInput;
 use reth_stateless::UncompressedPublicKey;
-use stateless_validator_common::execution_payload_experiment::ForkName;
+use stateless_validator_common::execution_payload::ForkName;
 pub use stateless_validator_common::guest::StatelessValidatorOutput;
 
 use crate::{
