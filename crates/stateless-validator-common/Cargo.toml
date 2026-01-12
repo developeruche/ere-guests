@@ -12,6 +12,7 @@ workspace = true
 rkyv = { workspace = true, optional = true }
 serde = { workspace = true, features = ["derive"], optional = true }
 sha2 = { workspace = true, optional = true }
+anyhow.workspace = true
 
 # lighthouse
 tree_hash.workspace = true

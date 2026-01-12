@@ -204,13 +204,34 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
 
 #[cfg(test)]
 mod test {
+    use stateless_validator_common::execution_payload::{
+        ExecutionPayloadHeaderV1, NewExecutionPayloadRequest,
+    };
+
     use crate::guest::{Io, StatelessValidatorOutput, StatelessValidatorRethIo};
 
     #[test]
     fn serialize_output() {
+        let dummy_new_execution_payload_request =
+            NewExecutionPayloadRequest::new_bellatrix(ExecutionPayloadHeaderV1 {
+                parent_hash: [1; 32],
+                fee_recipient: [2; 20],
+                state_root: [3; 32],
+                receipts_root: [4; 32],
+                logs_bloom: Default::default(),
+                prev_randao: [5; 32],
+                block_number: 1,
+                gas_limit: 2,
+                gas_used: 3,
+                timestamp: 4,
+                extra_data: Default::default(),
+                base_fee_per_gas: [6; 32],
+                block_hash: [7; 32],
+                transactions_root: [8; 32],
+            });
         for output in [
-            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], false),
-            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], true),
+            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), false),
+            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), true),
         ] {
             assert_eq!(
                 StatelessValidatorRethIo::serialize_output(&output).unwrap(),

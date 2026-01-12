@@ -6030,6 +6030,7 @@ version = "0.1.0"
 dependencies = [
  "alloy-eips",
  "alloy-primitives",
+ "anyhow",
  "ethereum_ssz",
  "ethereum_ssz_derive",
  "rkyv",

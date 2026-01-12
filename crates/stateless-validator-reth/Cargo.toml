@@ -9,7 +9,7 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-anyhow = { workspace = true, optional = true }
+anyhow = { workspace = true }
 once_cell.workspace = true
 serde.workspace = true
 serde_with.workspace = true
@@ -61,6 +61,5 @@ secp256k1 = ["reth-stateless/secp256k1"]
 host = [
     "std",
     "stateless-validator-common/host",
-    "dep:anyhow",
     "dep:ere-zkvm-interface",
 ]

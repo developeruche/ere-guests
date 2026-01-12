@@ -2,15 +2,16 @@
 
 use alloc::vec::Vec;
 
-use alloy_eips::eip4895::Withdrawal;
+use alloy_eips::{eip4844::VersionedHashIter, eip4895::Withdrawal, eip7685::Requests};
 use alloy_genesis::ChainConfig;
-use alloy_primitives::{B256, Bytes};
+use alloy_primitives::Bytes;
 use alloy_rpc_types_engine::{ExecutionData, ExecutionPayload, PayloadError};
+use anyhow::Result;
 use ssz_types::{FixedVector, VariableList};
 use stateless_validator_common::execution_payload::{
-    Address20, ExecutionPayloadHeaderBellatrix, ExecutionPayloadHeaderCapella,
-    ExecutionPayloadHeaderDeneb, ForkName, Hash32, MAX_BYTES_PER_TRANSACTION,
-    MAX_TRANSACTIONS_PER_PAYLOAD, MaxWithdrawalsPerPayload,
+    Address20, ExecutionPayloadHeaderV1, ExecutionPayloadHeaderV2, ExecutionPayloadHeaderV3,
+    ForkName, Hash32, MAX_BYTES_PER_TRANSACTION, MAX_TRANSACTIONS_PER_PAYLOAD,
+    MaxWithdrawalsPerPayload, NewExecutionPayloadRequest,
 };
 use tree_hash::{BYTES_PER_CHUNK, Hash256, TreeHash, merkle_root, mix_in_length};
 use tree_hash_derive::TreeHash;
@@ -50,15 +51,15 @@ pub fn execution_data_to_block(
     execution_data.try_into_block()
 }
 
-/// Computes the tree_hash_root of ExecutionPayloadHeader from ExecutionData.
-///
-/// This function converts the execution layer payload into a consensus layer
-/// header representation and computes its SSZ tree hash root.
-pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
+/// Creates a new execution payload request.
+pub fn create_new_execution_payload_request(
+    execution_data: &ExecutionData,
+    requests: &Requests,
+) -> Result<NewExecutionPayloadRequest> {
     match &execution_data.payload {
         ExecutionPayload::V1(v1) => {
             let transactions_root = compute_transactions_root(&v1.transactions);
-            let header = ExecutionPayloadHeaderBellatrix {
+            let header = ExecutionPayloadHeaderV1 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -74,14 +75,14 @@ pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
                 block_hash: v1.block_hash.0,
                 transactions_root,
             };
-            B256::from(header.tree_hash_root().0)
+            Ok(NewExecutionPayloadRequest::new_bellatrix(header))
         }
         ExecutionPayload::V2(v2) => {
             // V2 is nested: v2.payload_inner contains V1 fields
             let v1 = &v2.payload_inner;
             let transactions_root = compute_transactions_root(&v1.transactions);
             let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
-            let header = ExecutionPayloadHeaderCapella {
+            let header = ExecutionPayloadHeaderV2 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -98,7 +99,7 @@ pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
                 transactions_root,
                 withdrawals_root,
             };
-            B256::from(header.tree_hash_root().0)
+            Ok(NewExecutionPayloadRequest::new_capella(header))
         }
         ExecutionPayload::V3(v3) => {
             // V3 is doubly nested: v3.payload_inner.payload_inner contains V1 fields
@@ -106,7 +107,7 @@ pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
             let v1 = &v2.payload_inner;
             let transactions_root = compute_transactions_root(&v1.transactions);
             let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
-            let header = ExecutionPayloadHeaderDeneb {
+            let header = ExecutionPayloadHeaderV3 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -125,7 +126,31 @@ pub fn execution_payload_tree_root(execution_data: &ExecutionData) -> B256 {
                 blob_gas_used: v3.blob_gas_used,
                 excess_blob_gas: v3.excess_blob_gas,
             };
-            B256::from(header.tree_hash_root().0)
+            let sidecar = &execution_data.sidecar;
+            match (sidecar.cancun(), sidecar.prague()) {
+                // Deneb
+                (Some(c), None) => {
+                    let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
+                    let parent_beacon_block_root = c.parent_beacon_block_root.0;
+                    NewExecutionPayloadRequest::new_deneb(
+                        header,
+                        versioned_hashes,
+                        parent_beacon_block_root,
+                    )
+                }
+                // Electra
+                (Some(c), Some(_)) => {
+                    let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
+                    let parent_beacon_block_root = c.parent_beacon_block_root.0;
+                    NewExecutionPayloadRequest::new_electra(
+                        header,
+                        versioned_hashes,
+                        parent_beacon_block_root,
+                        requests,
+                    )
+                }
+                _ => anyhow::bail!("Missing sidecar for Deneb execution payload"),
+            }
         }
     }
 }

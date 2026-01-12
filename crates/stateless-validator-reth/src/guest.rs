@@ -16,7 +16,7 @@ use serde_with::serde_as;
 use sparsestate::SparseState;
 
 use crate::{
-    execution_payload::{execution_data_to_block, execution_payload_tree_root},
+    execution_payload::{create_new_execution_payload_request, execution_data_to_block},
     serde_bincode_compat::ExecutionDataCompat,
 };
 
@@ -54,18 +54,6 @@ impl Guest for StatelessValidatorRethGuest {
     type Io = StatelessValidatorRethIo;
 
     fn compute<P: Platform>(input: GuestInput<Self>) -> GuestOutput<Self> {
-        // TODO: check versioned_hashes
-
-        let (execution_payload_root, beacon_root) =
-            P::cycle_scope("public_inputs_preparation", || {
-                let execution_payload_root = execution_payload_tree_root(&input.execution_data);
-                let beacon_root = input
-                    .execution_data
-                    .parent_beacon_block_root()
-                    .unwrap_or_default();
-                (execution_payload_root, beacon_root)
-            });
-
         let cancun_sidecar = input.execution_data.sidecar.cancun().cloned();
         let (chain_spec, evm_config, block_result) =
             P::cycle_scope("validation_inputs_preparation", || {
@@ -75,14 +63,14 @@ impl Guest for StatelessValidatorRethGuest {
                 };
                 let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
                 let evm_config = EthEvmConfig::new(chain_spec.clone());
-                let block_result = execution_data_to_block(input.execution_data);
+                let block_result = execution_data_to_block(input.execution_data.clone());
                 (chain_spec, evm_config, block_result)
             });
         let block = match block_result {
             Ok(block) => block,
             Err(err) => {
                 P::print(&format!("Failed to convert to reth block: {err}\n"));
-                return StatelessValidatorOutput::new(execution_payload_root, beacon_root, false);
+                return StatelessValidatorOutput::default(); // TODO
             }
         };
 
@@ -91,7 +79,7 @@ impl Guest for StatelessValidatorRethGuest {
             ensure_matching_blob_versioned_hashes(&block.body, cancun_sidecar.as_ref())
         {
             P::print(&format!("Versioned hashes validation failed: {err}\n"));
-            return StatelessValidatorOutput::new(execution_payload_root, beacon_root, false);
+            return StatelessValidatorOutput::default(); // TODO
         }
 
         let res = P::cycle_scope("validation", || {
@@ -102,14 +90,21 @@ impl Guest for StatelessValidatorRethGuest {
                 chain_spec,
                 evm_config,
             )
-            .map(|(block_hash, _)| block_hash)
         });
 
         match res {
-            Ok(_) => StatelessValidatorOutput::new(execution_payload_root, beacon_root, true),
+            Ok((_, output)) => {
+                let Ok(new_execution_payload_request) =
+                    create_new_execution_payload_request(&input.execution_data, &output.requests)
+                else {
+                    P::print("Failed to create new execution payload request\n");
+                    return StatelessValidatorOutput::default(); // TODO
+                };
+                StatelessValidatorOutput::new(new_execution_payload_request, true)
+            }
             Err(err) => {
                 P::print(&format!("Block validation failed: {err}\n"));
-                StatelessValidatorOutput::new(execution_payload_root, beacon_root, false)
+                StatelessValidatorOutput::default() // TODO
             }
         }
     }

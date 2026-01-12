@@ -6,7 +6,7 @@ use stateless_validator_ethrex::guest::{
     StatelessValidatorEthrexGuest, StatelessValidatorEthrexInput, StatelessValidatorOutput,
 };
 use stateless_validator_reth::{
-    execution_payload::execution_payload_tree_root, host::to_execution_data,
+    execution_payload::create_new_execution_payload_request, host::to_execution_data,
 };
 
 fn test_execution(zkvm_kind: zkVMKind) {
@@ -15,7 +15,7 @@ fn test_execution(zkvm_kind: zkVMKind) {
         let input = StatelessValidatorEthrexInput::new(&fixture.stateless_input).unwrap();
 
         let execution_data = to_execution_data(&fixture.stateless_input);
-        let execution_payload_header_hash = execution_payload_tree_root(&execution_data);
+        let execution_payload_header_hash = create_new_execution_payload_request(&execution_data);
         let beacon_root = fixture
             .stateless_input
             .block

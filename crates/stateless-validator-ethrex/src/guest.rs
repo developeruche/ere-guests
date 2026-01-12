@@ -80,7 +80,7 @@ impl Guest for StatelessValidatorEthrexGuest {
         StatelessValidatorEthrexInput(input): GuestInput<Self>,
     ) -> GuestOutput<Self> {
         if input.blocks.len() != 1 {
-            return StatelessValidatorOutput::new([0; 32], [0; 32], false);
+            return StatelessValidatorOutput::default(); // TODO
         }
 
         let (execution_payload_header_hash, beacon_root) =
@@ -106,11 +106,11 @@ impl Guest for StatelessValidatorEthrexGuest {
 
         match res {
             Ok(_) => {
-                StatelessValidatorOutput::new(execution_payload_header_hash, beacon_root, true)
+                StatelessValidatorOutput::default() // TODO -- Implement.
             }
             Err(err) => {
                 P::print(&format!("Block {} validation failed: {err}\n", block_num));
-                StatelessValidatorOutput::new(execution_payload_header_hash, beacon_root, false)
+                StatelessValidatorOutput::default() // TODO
             }
         }
     }
@@ -118,13 +118,34 @@ impl Guest for StatelessValidatorEthrexGuest {
 
 #[cfg(test)]
 mod test {
+    use stateless_validator_common::execution_payload::{
+        ExecutionPayloadHeaderV1, NewExecutionPayloadRequest,
+    };
+
     use crate::guest::{Io, StatelessValidatorEthrexIo, StatelessValidatorOutput};
 
     #[test]
     fn serialize_output() {
+        let dummy_new_execution_payload_request =
+            NewExecutionPayloadRequest::new_bellatrix(ExecutionPayloadHeaderV1 {
+                parent_hash: [1; 32],
+                fee_recipient: [2; 20],
+                state_root: [3; 32],
+                receipts_root: [4; 32],
+                logs_bloom: Default::default(),
+                prev_randao: [5; 32],
+                block_number: 1,
+                gas_limit: 2,
+                gas_used: 3,
+                timestamp: 4,
+                extra_data: Default::default(),
+                base_fee_per_gas: [6; 32],
+                block_hash: [7; 32],
+                transactions_root: [8; 32],
+            });
         for output in [
-            StatelessValidatorOutput::new([0x00; 32], [0x00; 32], false),
-            StatelessValidatorOutput::new([0xff; 32], [0xff; 32], true),
+            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), false),
+            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), true),
         ] {
             assert_eq!(
                 StatelessValidatorEthrexIo::serialize_output(&output).unwrap(),
