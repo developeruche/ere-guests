@@ -3,10 +3,14 @@
 //! This module provides functionality to compute the SSZ tree hash root of an
 //! ExecutionPayloadHeader directly from alloy's ExecutionData type.
 
+// TODO
 // Allow missing docs for experimental module
 #![allow(missing_docs)]
 
+use anyhow::{Context, Result};
+use ssz::{Decode, Encode};
 use ssz_types::{FixedVector, VariableList};
+use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 
 // Type aliases for SSZ-compatible primitives that implement TreeHash
@@ -19,9 +23,52 @@ pub type Uint256Bytes = [u8; 32];
 // SSZ list bounds from consensus specs
 pub type MaxWithdrawalsPerPayload = typenum::U16;
 
+// Electra request bounds (EIP-6110, EIP-7002, EIP-7251)
+pub type MaxDepositRequestsPerPayload = typenum::U8192; // 2^13
+pub type MaxWithdrawalRequestsPerPayload = typenum::U16; // 2^4
+pub type MaxConsolidationRequestsPerPayload = typenum::U2; // 2^1
+
+// Type aliases for Electra request fields
+pub type Bytes48 = [u8; 48];
+pub type Bytes96 = [u8; 96];
+
 // Constants for zero-copy transaction root computation
 pub const MAX_BYTES_PER_TRANSACTION: usize = 1 << 30; // 2^30
 pub const MAX_TRANSACTIONS_PER_PAYLOAD: usize = 1 << 20; // 2^20
+
+/// DepositRequest from EIP-6110: Supply validator deposits on chain
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+pub struct DepositRequest {
+    pub pubkey: Bytes48,
+    pub withdrawal_credentials: Hash32,
+    pub amount: u64,
+    pub signature: Bytes96,
+    pub index: u64,
+}
+
+/// WithdrawalRequest from EIP-7002: Execution layer triggerable withdrawals
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+pub struct WithdrawalRequest {
+    pub source_address: Address20,
+    pub validator_pubkey: Bytes48,
+    pub amount: u64,
+}
+
+/// ConsolidationRequest from EIP-7251: Increase the MAX_EFFECTIVE_BALANCE
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+pub struct ConsolidationRequest {
+    pub source_address: Address20,
+    pub source_pubkey: Bytes48,
+    pub target_pubkey: Bytes48,
+}
+
+/// ExecutionRequests container for Electra fork
+#[derive(Debug, Clone, Default, TreeHash)]
+pub struct ExecutionRequests {
+    pub deposits: VariableList<DepositRequest, MaxDepositRequestsPerPayload>,
+    pub withdrawals: VariableList<WithdrawalRequest, MaxWithdrawalRequestsPerPayload>,
+    pub consolidations: VariableList<ConsolidationRequest, MaxConsolidationRequestsPerPayload>,
+}
 
 /// Enum representing different Ethereum fork names.
 #[derive(Debug, Clone, Copy)]
@@ -91,4 +138,179 @@ pub struct ExecutionPayloadHeaderDeneb {
     pub withdrawals_root: Hash32,
     pub blob_gas_used: u64,
     pub excess_blob_gas: u64,
+}
+
+#[derive(Debug, Clone, TreeHash)]
+pub struct NewExecutionPayloadRequestBellatrix {
+    pub execution_payload_header: ExecutionPayloadHeaderBellatrix,
+}
+
+#[derive(Debug, Clone, TreeHash)]
+pub struct NewExecutionPayloadRequestCapella {
+    pub execution_payload_header: ExecutionPayloadHeaderCapella,
+}
+
+#[derive(Debug, Clone, TreeHash)]
+pub struct NewExecutionPayloadRequestDeneb {
+    pub execution_payload_header: ExecutionPayloadHeaderDeneb,
+    pub versioned_hashes: VariableList<Hash32, MaxWithdrawalsPerPayload>,
+    pub parent_beacon_block_root: Hash32,
+}
+
+#[derive(Debug, Clone, TreeHash)]
+pub struct NewExecutionPayloadRequestElectra {
+    pub execution_payload_header: ExecutionPayloadHeaderDeneb,
+    pub versioned_hashes: VariableList<Hash32, MaxWithdrawalsPerPayload>,
+    pub parent_beacon_block_root: Hash32,
+    pub execution_requests: ExecutionRequests,
+}
+
+#[derive(Debug, Clone)]
+pub enum NewExecutionPayloadRequest {
+    Bellatrix(NewExecutionPayloadRequestBellatrix),
+    Capella(NewExecutionPayloadRequestCapella),
+    Deneb(NewExecutionPayloadRequestDeneb),
+    Electra(NewExecutionPayloadRequestElectra),
+}
+
+impl NewExecutionPayloadRequest {
+    pub fn new_bellatrix(execution_payload_header: ExecutionPayloadHeaderBellatrix) -> Self {
+        NewExecutionPayloadRequest::Bellatrix(NewExecutionPayloadRequestBellatrix {
+            execution_payload_header,
+        })
+    }
+
+    pub fn new_capella(execution_payload_header: ExecutionPayloadHeaderCapella) -> Self {
+        NewExecutionPayloadRequest::Capella(NewExecutionPayloadRequestCapella {
+            execution_payload_header,
+        })
+    }
+
+    pub fn new_deneb(
+        execution_payload_header: ExecutionPayloadHeaderDeneb,
+        versioned_hashes: VariableList<Hash32, MaxWithdrawalsPerPayload>,
+        parent_beacon_block_root: Hash32,
+    ) -> Self {
+        NewExecutionPayloadRequest::Deneb(NewExecutionPayloadRequestDeneb {
+            execution_payload_header,
+            versioned_hashes,
+            parent_beacon_block_root,
+        })
+    }
+
+    pub fn new_electra(
+        execution_payload_header: ExecutionPayloadHeaderDeneb,
+        versioned_hashes: VariableList<Hash32, MaxWithdrawalsPerPayload>,
+        parent_beacon_block_root: Hash32,
+        execution_requests: &[u8],
+    ) -> Result<Self> {
+        let execution_requests = decode_execution_requests(execution_requests)
+            .context("Decoding execution requests failed")?;
+        Ok(NewExecutionPayloadRequest::Electra(
+            NewExecutionPayloadRequestElectra {
+                execution_payload_header,
+                versioned_hashes,
+                parent_beacon_block_root,
+                execution_requests,
+            },
+        ))
+    }
+
+    pub fn tree_hash_root(&self) -> [u8; 32] {
+        match self {
+            NewExecutionPayloadRequest::Bellatrix(req) => req.tree_hash_root().0,
+            NewExecutionPayloadRequest::Capella(req) => req.tree_hash_root().0,
+            NewExecutionPayloadRequest::Deneb(req) => req.tree_hash_root().0,
+            NewExecutionPayloadRequest::Electra(req) => req.tree_hash_root().0,
+        }
+    }
+}
+
+fn decode_execution_requests(requests_list: &[u8]) -> Result<ExecutionRequests> {
+    // EIP-7685: requests are encoded as request_type (1 byte) ++ request_data
+    // Request types for Electra (Prague):
+    // - 0x00: Deposit requests (EIP-6110)
+    // - 0x01: Withdrawal requests (EIP-7002)
+    // - 0x02: Consolidation requests (EIP-7251)
+
+    const DEPOSIT_REQUEST_TYPE: u8 = 0x00;
+    const WITHDRAWAL_REQUEST_TYPE: u8 = 0x01;
+    const CONSOLIDATION_REQUEST_TYPE: u8 = 0x02;
+
+    // Fixed SSZ sizes for each request type (excluding the type byte)
+    let deposit_request_size = <DepositRequest as Encode>::ssz_fixed_len();
+    let withdrawal_request_size = <WithdrawalRequest as Encode>::ssz_fixed_len();
+    let consolidation_request_size = <ConsolidationRequest as Encode>::ssz_fixed_len();
+
+    let mut deposits = Vec::new();
+    let mut withdrawals = Vec::new();
+    let mut consolidations = Vec::new();
+
+    let mut offset = 0;
+    while offset < requests_list.len() {
+        // Read request type
+        let request_type = requests_list[offset];
+        offset += 1;
+
+        match request_type {
+            DEPOSIT_REQUEST_TYPE => {
+                anyhow::ensure!(
+                    offset + deposit_request_size <= requests_list.len(),
+                    "Insufficient data for deposit request at offset {}",
+                    offset - 1
+                );
+
+                let data = &requests_list[offset..offset + deposit_request_size];
+                let deposit = DepositRequest::from_ssz_bytes(data).map_err(|e| {
+                    anyhow::anyhow!("Failed to SSZ decode deposit request: {:?}", e)
+                })?;
+                deposits.push(deposit);
+
+                offset += deposit_request_size;
+            }
+            WITHDRAWAL_REQUEST_TYPE => {
+                anyhow::ensure!(
+                    offset + withdrawal_request_size <= requests_list.len(),
+                    "Insufficient data for withdrawal request at offset {}",
+                    offset - 1
+                );
+
+                let data = &requests_list[offset..offset + withdrawal_request_size];
+                let withdrawal = WithdrawalRequest::from_ssz_bytes(data).map_err(|e| {
+                    anyhow::anyhow!("Failed to SSZ decode withdrawal request: {:?}", e)
+                })?;
+                withdrawals.push(withdrawal);
+
+                offset += withdrawal_request_size;
+            }
+            CONSOLIDATION_REQUEST_TYPE => {
+                anyhow::ensure!(
+                    offset + consolidation_request_size <= requests_list.len(),
+                    "Insufficient data for consolidation request at offset {}",
+                    offset - 1
+                );
+
+                let data = &requests_list[offset..offset + consolidation_request_size];
+                let consolidation = ConsolidationRequest::from_ssz_bytes(data).map_err(|e| {
+                    anyhow::anyhow!("Failed to SSZ decode consolidation request: {:?}", e)
+                })?;
+                consolidations.push(consolidation);
+
+                offset += consolidation_request_size;
+            }
+            _ => {
+                anyhow::bail!("Unknown request type: {:#x}", request_type);
+            }
+        }
+    }
+
+    Ok(ExecutionRequests {
+        deposits: VariableList::new(deposits)
+            .map_err(|e| anyhow::anyhow!("Failed to create deposits VariableList: {:?}", e))?,
+        withdrawals: VariableList::new(withdrawals)
+            .map_err(|e| anyhow::anyhow!("Failed to create withdrawals VariableList: {:?}", e))?,
+        consolidations: VariableList::new(consolidations).map_err(|e| {
+            anyhow::anyhow!("Failed to create consolidations VariableList: {:?}", e)
+        })?,
+    })
 }
