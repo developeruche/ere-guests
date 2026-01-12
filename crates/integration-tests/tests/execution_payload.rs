@@ -7,9 +7,11 @@
 use std::collections::HashMap;
 
 use alloy_primitives::{B256, b256};
+use guest::Guest;
 use integration_tests::get_fixtures;
 use stateless_validator_reth::{
-    execution_payload::{execution_data_to_block, create_new_execution_payload_request},
+    execution_payload::{create_new_execution_payload_request, execution_data_to_block},
+    guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput},
     host::to_execution_data,
 };
 
@@ -22,8 +24,12 @@ fn test_stateless_input_to_execution_payload() {
         let block_hash = fixture.stateless_input.block.hash_slow();
         let expected_root = *expected_roots.get(&block_hash).unwrap();
 
+        let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
+        let output = StatelessValidatorRethGuest::compute(input);
         let execution_data = to_execution_data(&fixture.stateless_input);
-        let execution_payload_tree_root = create_new_execution_payload_request(&execution_data);
+        let execution_payload_tree_root = create_new_execution_payload_request(&execution_data)
+            .unwrap()
+            .tree_hash_root();
 
         assert_eq!(
             execution_payload_tree_root, expected_root,

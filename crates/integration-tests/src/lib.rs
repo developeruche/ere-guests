@@ -9,7 +9,7 @@ use ere_dockerized::{CompilerKind, DockerizedCompiler, DockerizedzkVM, zkVMKind}
 use ere_io::Io;
 use ere_zkvm_interface::{Compiler, Input, ProverResourceType, zkVM};
 use flate2::read::GzDecoder;
-use guest::{Guest, GuestInput, GuestOutput};
+use guest::{Guest, GuestInput, GuestOutput, Platform};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use tar::Archive;
@@ -149,5 +149,24 @@ impl TestCase {
     pub fn output_sha256(mut self) -> Self {
         self.expected_public_values = Sha256::digest(self.expected_public_values).to_vec();
         self
+    }
+}
+/// A platform that to run guests outside zkVMs.
+#[derive(Debug)]
+pub struct NoopPlatform;
+
+impl Platform for NoopPlatform {
+    #[allow(unreachable_code)]
+    fn read_whole_input() -> impl std::ops::Deref<Target = [u8]> {
+        panic!("Can't read input in NoopPlatform");
+        &[] as &[u8]
+    }
+
+    fn write_whole_output(_: &[u8]) {
+        panic!("Can't write output in NoopPlatform");
+    }
+
+    fn print(message: &str) {
+        println!("{}", message);
     }
 }

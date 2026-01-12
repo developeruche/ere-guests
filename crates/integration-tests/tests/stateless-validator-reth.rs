@@ -1,28 +1,17 @@
 //! Execution tests for `stateless-validator-reth` guest program
 
 use ere_dockerized::zkVMKind;
-use integration_tests::{TestCase, get_fixtures};
-use stateless_validator_reth::{
-    execution_payload::create_new_execution_payload_request,
-    guest::{StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput},
-};
+use guest::Guest;
+use integration_tests::{NoopPlatform, TestCase, get_fixtures};
+use stateless_validator_reth::guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput};
 
 fn test_execution(zkvm_kind: zkVMKind) {
     let fixtures = get_fixtures();
     let inputs = fixtures.into_iter().map(|fixture| {
         let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
+        let output = StatelessValidatorRethGuest::compute::<NoopPlatform>(input.clone());
+        assert_eq!(output.successful_block_validation, fixture.success);
 
-        let execution_payload_header_hash = create_new_execution_payload_request(&input.execution_data);
-        let beacon_root = fixture
-            .stateless_input
-            .block
-            .parent_beacon_block_root
-            .unwrap_or_default();
-        let output = StatelessValidatorOutput::new(
-            execution_payload_header_hash,
-            beacon_root,
-            fixture.success,
-        );
         TestCase::new::<StatelessValidatorRethGuest>(fixture.name, input, output).output_sha256()
     });
     integration_tests::test_execution("stateless-validator-reth", zkvm_kind, inputs);
