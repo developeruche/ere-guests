@@ -205,7 +205,7 @@ pub fn to_execution_data(stateless_input: &StatelessInput) -> ExecutionData {
 #[cfg(test)]
 mod test {
     use stateless_validator_common::execution_payload::{
-        ExecutionPayloadHeaderV1, NewExecutionPayloadRequest,
+        ExecutionPayloadHeaderV1, NewPayloadRequest,
     };
 
     use crate::guest::{Io, StatelessValidatorOutput, StatelessValidatorRethIo};
@@ -213,7 +213,7 @@ mod test {
     #[test]
     fn serialize_output() {
         let dummy_new_execution_payload_request =
-            NewExecutionPayloadRequest::new_bellatrix(ExecutionPayloadHeaderV1 {
+            NewPayloadRequest::new_bellatrix(ExecutionPayloadHeaderV1 {
                 parent_hash: [1; 32],
                 fee_recipient: [2; 20],
                 state_root: [3; 32],

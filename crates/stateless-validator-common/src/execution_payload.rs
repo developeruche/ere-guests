@@ -142,24 +142,24 @@ pub struct ExecutionPayloadHeaderV3 {
 }
 
 #[derive(Debug, Clone, TreeHash)]
-pub struct NewExecutionPayloadRequestBellatrix {
+pub struct NewPayloadRequestBellatrix {
     pub execution_payload_header: ExecutionPayloadHeaderV1,
 }
 
 #[derive(Debug, Clone, TreeHash)]
-pub struct NewExecutionPayloadRequestCapella {
+pub struct NewPayloadRequestCapella {
     pub execution_payload_header: ExecutionPayloadHeaderV2,
 }
 
 #[derive(Debug, Clone, TreeHash)]
-pub struct NewExecutionPayloadRequestDeneb {
+pub struct NewPayloadRequestDeneb {
     pub execution_payload_header: ExecutionPayloadHeaderV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
 }
 
 #[derive(Debug, Clone, TreeHash)]
-pub struct NewExecutionPayloadRequestElectra {
+pub struct NewPayloadRequestElectra {
     pub execution_payload_header: ExecutionPayloadHeaderV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
@@ -167,22 +167,22 @@ pub struct NewExecutionPayloadRequestElectra {
 }
 
 #[derive(Debug, Clone)]
-pub enum NewExecutionPayloadRequest {
-    Bellatrix(NewExecutionPayloadRequestBellatrix),
-    Capella(NewExecutionPayloadRequestCapella),
-    Deneb(NewExecutionPayloadRequestDeneb),
-    Electra(NewExecutionPayloadRequestElectra),
+pub enum NewPayloadRequest {
+    Bellatrix(NewPayloadRequestBellatrix),
+    Capella(NewPayloadRequestCapella),
+    Deneb(NewPayloadRequestDeneb),
+    Electra(NewPayloadRequestElectra),
 }
 
-impl NewExecutionPayloadRequest {
+impl NewPayloadRequest {
     pub fn new_bellatrix(execution_payload_header: ExecutionPayloadHeaderV1) -> Self {
-        NewExecutionPayloadRequest::Bellatrix(NewExecutionPayloadRequestBellatrix {
+        NewPayloadRequest::Bellatrix(NewPayloadRequestBellatrix {
             execution_payload_header,
         })
     }
 
     pub fn new_capella(execution_payload_header: ExecutionPayloadHeaderV2) -> Self {
-        NewExecutionPayloadRequest::Capella(NewExecutionPayloadRequestCapella {
+        NewPayloadRequest::Capella(NewPayloadRequestCapella {
             execution_payload_header,
         })
     }
@@ -196,13 +196,11 @@ impl NewExecutionPayloadRequest {
             "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
             err)
         )?;
-        Ok(NewExecutionPayloadRequest::Deneb(
-            NewExecutionPayloadRequestDeneb {
-                execution_payload_header,
-                versioned_hashes,
-                parent_beacon_block_root,
-            },
-        ))
+        Ok(NewPayloadRequest::Deneb(NewPayloadRequestDeneb {
+            execution_payload_header,
+            versioned_hashes,
+            parent_beacon_block_root,
+        }))
     }
 
     pub fn new_electra(
@@ -217,22 +215,20 @@ impl NewExecutionPayloadRequest {
         )?;
         let execution_requests = decode_execution_requests(execution_requests)
             .context("Decoding execution requests failed")?;
-        Ok(NewExecutionPayloadRequest::Electra(
-            NewExecutionPayloadRequestElectra {
-                execution_payload_header,
-                versioned_hashes,
-                parent_beacon_block_root,
-                execution_requests,
-            },
-        ))
+        Ok(NewPayloadRequest::Electra(NewPayloadRequestElectra {
+            execution_payload_header,
+            versioned_hashes,
+            parent_beacon_block_root,
+            execution_requests,
+        }))
     }
 
     pub fn tree_hash_root(&self) -> [u8; 32] {
         match self {
-            NewExecutionPayloadRequest::Bellatrix(req) => req.tree_hash_root().0,
-            NewExecutionPayloadRequest::Capella(req) => req.tree_hash_root().0,
-            NewExecutionPayloadRequest::Deneb(req) => req.tree_hash_root().0,
-            NewExecutionPayloadRequest::Electra(req) => req.tree_hash_root().0,
+            NewPayloadRequest::Bellatrix(req) => req.tree_hash_root().0,
+            NewPayloadRequest::Capella(req) => req.tree_hash_root().0,
+            NewPayloadRequest::Deneb(req) => req.tree_hash_root().0,
+            NewPayloadRequest::Electra(req) => req.tree_hash_root().0,
         }
     }
 }

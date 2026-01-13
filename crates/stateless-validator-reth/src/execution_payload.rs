@@ -11,7 +11,7 @@ use ssz_types::{FixedVector, VariableList};
 use stateless_validator_common::execution_payload::{
     Address20, ExecutionPayloadHeaderV1, ExecutionPayloadHeaderV2, ExecutionPayloadHeaderV3,
     ForkName, Hash32, MAX_BYTES_PER_TRANSACTION, MAX_TRANSACTIONS_PER_PAYLOAD,
-    MaxWithdrawalsPerPayload, NewExecutionPayloadRequest,
+    MaxWithdrawalsPerPayload, NewPayloadRequest,
 };
 use tree_hash::{BYTES_PER_CHUNK, Hash256, TreeHash, merkle_root, mix_in_length};
 use tree_hash_derive::TreeHash;
@@ -55,7 +55,7 @@ pub fn execution_data_to_block(
 pub fn create_new_execution_payload_request(
     execution_data: &ExecutionData,
     requests: &Requests,
-) -> Result<NewExecutionPayloadRequest> {
+) -> Result<NewPayloadRequest> {
     match &execution_data.payload {
         ExecutionPayload::V1(v1) => {
             let transactions_root = compute_transactions_root(&v1.transactions);
@@ -75,7 +75,7 @@ pub fn create_new_execution_payload_request(
                 block_hash: v1.block_hash.0,
                 transactions_root,
             };
-            Ok(NewExecutionPayloadRequest::new_bellatrix(header))
+            Ok(NewPayloadRequest::new_bellatrix(header))
         }
         ExecutionPayload::V2(v2) => {
             // V2 is nested: v2.payload_inner contains V1 fields
@@ -99,7 +99,7 @@ pub fn create_new_execution_payload_request(
                 transactions_root,
                 withdrawals_root,
             };
-            Ok(NewExecutionPayloadRequest::new_capella(header))
+            Ok(NewPayloadRequest::new_capella(header))
         }
         ExecutionPayload::V3(v3) => {
             // V3 is doubly nested: v3.payload_inner.payload_inner contains V1 fields
@@ -132,17 +132,13 @@ pub fn create_new_execution_payload_request(
                 (Some(c), None) => {
                     let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
                     let parent_beacon_block_root = c.parent_beacon_block_root.0;
-                    NewExecutionPayloadRequest::new_deneb(
-                        header,
-                        versioned_hashes,
-                        parent_beacon_block_root,
-                    )
+                    NewPayloadRequest::new_deneb(header, versioned_hashes, parent_beacon_block_root)
                 }
                 // Electra
                 (Some(c), Some(_)) => {
                     let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
                     let parent_beacon_block_root = c.parent_beacon_block_root.0;
-                    NewExecutionPayloadRequest::new_electra(
+                    NewPayloadRequest::new_electra(
                         header,
                         versioned_hashes,
                         parent_beacon_block_root,

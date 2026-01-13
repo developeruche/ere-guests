@@ -1,6 +1,6 @@
 //! Stateless validator common types and utilities for guest.
 
-use crate::execution_payload::NewExecutionPayloadRequest;
+use crate::execution_payload::NewPayloadRequest;
 
 /// Static size of [`StatelessValidatorOutput`].
 pub const STATELESS_VALIDATOR_OUTPUT_SIZE: usize = size_of::<StatelessValidatorOutput>();
@@ -22,7 +22,7 @@ pub struct StatelessValidatorOutput {
 impl StatelessValidatorOutput {
     /// Constructs a new [`StatelessValidatorOutput`].
     pub fn new(
-        new_execution_payload_request: NewExecutionPayloadRequest,
+        new_execution_payload_request: NewPayloadRequest,
         successful_block_validation: bool,
     ) -> Self {
         let new_execution_payload_request_root = new_execution_payload_request.tree_hash_root();
