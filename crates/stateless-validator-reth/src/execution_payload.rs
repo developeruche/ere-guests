@@ -52,7 +52,7 @@ pub fn execution_data_to_block(
 }
 
 /// Creates a new execution payload request.
-pub fn create_new_execution_payload_request(
+pub fn create_new_payload_request(
     execution_data: &ExecutionData,
     requests: &Requests,
 ) -> Result<NewPayloadRequest> {

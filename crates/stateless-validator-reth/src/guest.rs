@@ -16,7 +16,7 @@ use serde_with::serde_as;
 use sparsestate::SparseState;
 
 use crate::{
-    execution_payload::{create_new_execution_payload_request, execution_data_to_block},
+    execution_payload::{create_new_payload_request, execution_data_to_block},
     serde_bincode_compat::ExecutionDataCompat,
 };
 
@@ -94,13 +94,13 @@ impl Guest for StatelessValidatorRethGuest {
 
         match res {
             Ok((_, output)) => {
-                let Ok(new_execution_payload_request) =
-                    create_new_execution_payload_request(&input.execution_data, &output.requests)
+                let Ok(new_payload_request) =
+                    create_new_payload_request(&input.execution_data, &output.requests)
                 else {
                     P::print("Failed to create new execution payload request\n");
                     return StatelessValidatorOutput::default(); // TODO
                 };
-                StatelessValidatorOutput::new(new_execution_payload_request, true)
+                StatelessValidatorOutput::new(new_payload_request, true)
             }
             Err(err) => {
                 P::print(&format!("Block validation failed: {err}\n"));

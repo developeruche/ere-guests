@@ -126,7 +126,7 @@ mod test {
 
     #[test]
     fn serialize_output() {
-        let dummy_new_execution_payload_request =
+        let dummy_new_payload_request =
             NewPayloadRequest::new_bellatrix(ExecutionPayloadHeaderV1 {
                 parent_hash: [1; 32],
                 fee_recipient: [2; 20],
@@ -144,8 +144,8 @@ mod test {
                 transactions_root: [8; 32],
             });
         for output in [
-            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), false),
-            StatelessValidatorOutput::new(dummy_new_execution_payload_request.clone(), true),
+            StatelessValidatorOutput::new(dummy_new_payload_request.clone(), false),
+            StatelessValidatorOutput::new(dummy_new_payload_request.clone(), true),
         ] {
             assert_eq!(
                 StatelessValidatorEthrexIo::serialize_output(&output).unwrap(),

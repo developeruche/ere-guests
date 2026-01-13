@@ -28,7 +28,7 @@ fn test_stateless_input_to_execution_payload() {
         let output = StatelessValidatorRethGuest::compute::<NoopPlatform>(input);
 
         assert_eq!(
-            output.new_execution_payload_request_root, expected_root,
+            output.new_payload_request_root, expected_root,
             "ExecutionPayload tree root mismatch for block hash: {block_hash}"
         );
     }
