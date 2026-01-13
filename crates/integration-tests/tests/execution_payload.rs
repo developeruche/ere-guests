@@ -19,6 +19,7 @@ use stateless_validator_reth::{
 /// This verifies that StatelessInput -> ExecutionData -> ExecutionPaylaod is correct.
 #[test]
 fn test_stateless_input_to_execution_payload() {
+    // TODO: move this kind of tests to have independent assertion in stateless-validator-*.rs integration tests.
     let expected_roots = expected_execution_payload_tree_roots();
     for fixture in get_fixtures() {
         let block_hash = fixture.stateless_input.block.hash_slow();
