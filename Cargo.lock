@@ -6035,6 +6035,7 @@ dependencies = [
  "ethereum_ssz_derive",
  "rkyv",
  "serde",
+ "serde_with",
  "sha2",
  "ssz_types",
  "tree_hash",

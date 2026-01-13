@@ -45,9 +45,11 @@ pub fn determine_fork_name(chain_config: &ChainConfig, timestamp: u64) -> ForkNa
 ///
 /// This uses alloy's built-in `try_into_block` method to decode the execution
 /// payload transactions and construct a block.
-pub fn execution_data_to_block(
-    execution_data: ExecutionData,
+pub fn new_payload_request_to_block(
+    new_payload_request: NewPayloadRequest,
 ) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>, PayloadError> {
+    // TODO: map new_payload_request to alloy_rpc_types_engine.
+
     execution_data.try_into_block()
 }
 

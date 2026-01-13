@@ -21,7 +21,7 @@ pub struct StatelessValidatorOutput {
 
 impl StatelessValidatorOutput {
     /// Constructs a new [`StatelessValidatorOutput`].
-    pub fn new(new_payload_request: NewPayloadRequest, successful_block_validation: bool) -> Self {
+    pub fn new(new_payload_request: &NewPayloadRequest, successful_block_validation: bool) -> Self {
         let new_payload_request_root = new_payload_request.tree_hash_root();
         Self {
             new_payload_request_root,

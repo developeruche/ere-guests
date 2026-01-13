@@ -8,6 +8,8 @@
 #![allow(missing_docs)]
 
 use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+use serde_with::{Bytes, serde_as};
 use ssz::{Decode, Encode};
 use ssz_types::{FixedVector, VariableList};
 use tree_hash::TreeHash;
@@ -38,33 +40,47 @@ pub const MAX_BYTES_PER_TRANSACTION: usize = 1 << 30; // 2^30
 pub const MAX_TRANSACTIONS_PER_PAYLOAD: usize = 1 << 20; // 2^20
 
 /// DepositRequest from EIP-6110: Supply validator deposits on chain
-#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[serde_as]
+#[derive(
+    Debug, Clone, Serialize, Deserialize, TreeHash, ssz_derive::Encode, ssz_derive::Decode,
+)]
 pub struct DepositRequest {
+    #[serde_as(as = "Bytes")]
     pub pubkey: Bytes48,
     pub withdrawal_credentials: Hash32,
     pub amount: u64,
+    #[serde_as(as = "Bytes")]
     pub signature: Bytes96,
     pub index: u64,
 }
 
 /// WithdrawalRequest from EIP-7002: Execution layer triggerable withdrawals
-#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[serde_as]
+#[derive(
+    Debug, Clone, TreeHash, Serialize, Deserialize, ssz_derive::Encode, ssz_derive::Decode,
+)]
 pub struct WithdrawalRequest {
     pub source_address: Address20,
+    #[serde_as(as = "Bytes")]
     pub validator_pubkey: Bytes48,
     pub amount: u64,
 }
 
 /// ConsolidationRequest from EIP-7251: Increase the MAX_EFFECTIVE_BALANCE
-#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[serde_as]
+#[derive(
+    Debug, Clone, TreeHash, Serialize, Deserialize, ssz_derive::Encode, ssz_derive::Decode,
+)]
 pub struct ConsolidationRequest {
     pub source_address: Address20,
+    #[serde_as(as = "Bytes")]
     pub source_pubkey: Bytes48,
+    #[serde_as(as = "Bytes")]
     pub target_pubkey: Bytes48,
 }
 
 /// ExecutionRequests container for Electra fork
-#[derive(Debug, Clone, Default, TreeHash)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, TreeHash)]
 pub struct ExecutionRequests {
     pub deposits: VariableList<DepositRequest, MaxDepositRequestsPerPayload>,
     pub withdrawals: VariableList<WithdrawalRequest, MaxWithdrawalRequestsPerPayload>,
@@ -81,7 +97,7 @@ pub enum ForkName {
 }
 
 /// ExecutionPayloadHeaderV1
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct ExecutionPayloadHeaderV1 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -100,7 +116,7 @@ pub struct ExecutionPayloadHeaderV1 {
 }
 
 /// ExecutionPayloadHeaderV2
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct ExecutionPayloadHeaderV2 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -120,7 +136,7 @@ pub struct ExecutionPayloadHeaderV2 {
 }
 
 /// ExecutionPayloadHeaderV3
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct ExecutionPayloadHeaderV3 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -141,24 +157,24 @@ pub struct ExecutionPayloadHeaderV3 {
     pub excess_blob_gas: u64,
 }
 
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestBellatrix {
     pub execution_payload_header: ExecutionPayloadHeaderV1,
 }
 
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestCapella {
     pub execution_payload_header: ExecutionPayloadHeaderV2,
 }
 
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestDeneb {
     pub execution_payload_header: ExecutionPayloadHeaderV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
 }
 
-#[derive(Debug, Clone, TreeHash)]
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestElectra {
     pub execution_payload_header: ExecutionPayloadHeaderV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
@@ -166,7 +182,7 @@ pub struct NewPayloadRequestElectra {
     pub execution_requests: ExecutionRequests,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum NewPayloadRequest {
     Bellatrix(NewPayloadRequestBellatrix),
     Capella(NewPayloadRequestCapella),

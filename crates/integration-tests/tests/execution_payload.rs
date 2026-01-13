@@ -10,7 +10,7 @@ use alloy_primitives::{B256, b256};
 use guest::Guest;
 use integration_tests::{NoopPlatform, get_fixtures};
 use stateless_validator_reth::{
-    execution_payload::execution_data_to_block,
+    execution_payload::new_payload_request_to_block,
     guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput},
     host::to_execution_data,
 };
@@ -44,7 +44,7 @@ fn test_block_rountrip() {
         let execution_data = to_execution_data(&fixture.stateless_input);
 
         // In the guest, reconstruct the block from ExecutionData.
-        let guest_block = execution_data_to_block(execution_data).unwrap();
+        let guest_block = new_payload_request_to_block(execution_data).unwrap();
 
         // Assert that the reconstructed block matches the original block in StatelessInput.
         let guest_block_hash = guest_block.hash_slow();

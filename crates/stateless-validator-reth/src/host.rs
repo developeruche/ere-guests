@@ -31,7 +31,7 @@ impl StatelessValidatorRethInput {
         let signers = recover_signers(&stateless_input.block.body.transactions)?;
 
         Ok(Self {
-            execution_data,
+            new_payload_request: execution_data,
             witness: stateless_input.witness.clone(),
             chain_config: stateless_input.chain_config.clone(),
             public_keys: signers,

@@ -14,11 +14,9 @@ use reth_stateless::{
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sparsestate::SparseState;
+use stateless_validator_common::execution_payload::NewPayloadRequest;
 
-use crate::{
-    execution_payload::{create_new_payload_request, execution_data_to_block},
-    serde_bincode_compat::ExecutionDataCompat,
-};
+use crate::execution_payload::{create_new_payload_request, new_payload_request_to_block};
 
 #[rustfmt::skip]
 pub use {
@@ -30,9 +28,8 @@ pub use {
 #[serde_as]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatelessValidatorRethInput {
-    /// Execution data from the beacon block.
-    #[serde_as(as = "ExecutionDataCompat")]
-    pub execution_data: ExecutionData,
+    /// New payload request data.
+    pub new_payload_request: NewPayloadRequest,
     /// Execution witness for the EL block.
     pub witness: ExecutionWitness,
     /// Chain configuration for the stateless validation function
@@ -54,7 +51,7 @@ impl Guest for StatelessValidatorRethGuest {
     type Io = StatelessValidatorRethIo;
 
     fn compute<P: Platform>(input: GuestInput<Self>) -> GuestOutput<Self> {
-        let cancun_sidecar = input.execution_data.sidecar.cancun().cloned();
+        let cancun_sidecar = input.new_payload_request.sidecar.cancun().cloned();
         let (chain_spec, evm_config, block_result) =
             P::cycle_scope("validation_inputs_preparation", || {
                 let genesis = Genesis {
@@ -63,7 +60,7 @@ impl Guest for StatelessValidatorRethGuest {
                 };
                 let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
                 let evm_config = EthEvmConfig::new(chain_spec.clone());
-                let block_result = execution_data_to_block(input.execution_data.clone());
+                let block_result = new_payload_request_to_block(input.new_payload_request.clone());
                 (chain_spec, evm_config, block_result)
             });
         let block = match block_result {
@@ -93,15 +90,7 @@ impl Guest for StatelessValidatorRethGuest {
         });
 
         match res {
-            Ok((_, output)) => {
-                let Ok(new_payload_request) =
-                    create_new_payload_request(&input.execution_data, &output.requests)
-                else {
-                    P::print("Failed to create new execution payload request\n");
-                    return StatelessValidatorOutput::default(); // TODO
-                };
-                StatelessValidatorOutput::new(new_payload_request, true)
-            }
+            Ok((_, output)) => StatelessValidatorOutput::new(&input.new_payload_request, true),
             Err(err) => {
                 P::print(&format!("Block validation failed: {err}\n"));
                 StatelessValidatorOutput::default() // TODO
