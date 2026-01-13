@@ -249,41 +249,43 @@ fn convert_withdrawal(w: Withdrawal) -> AlloyWithdrawal {
     }
 }
 
-/// Computes the requests hash for Electra from ExecutionRequests.
-/// This is a placeholder - the actual implementation depends on the EIP-7685 spec.
+/// Computes the requests hash for Electra from ExecutionRequests per EIP-7685.
 fn compute_requests_hash(
     requests: &stateless_validator_common::execution_payload::ExecutionRequests,
 ) -> B256 {
-    use alloy_primitives::keccak256;
+    use sha2::{Digest, Sha256};
     use ssz::Encode;
 
-    // EIP-7685: requests_hash = keccak256(request_type_0 ++ request_data_0 ++ ...)
-    // For now, we compute a simple hash of the SSZ-encoded requests
-    let mut data = Vec::new();
+    let mut outer_hasher = Sha256::new();
 
     // Deposit requests (type 0x00)
+    let mut deposits_bytes = vec![0x00u8];
     for deposit in requests.deposits.iter() {
-        data.push(0x00);
-        data.extend(deposit.as_ssz_bytes());
+        deposits_bytes.extend(deposit.as_ssz_bytes());
+    }
+    if deposits_bytes.len() > 1 {
+        outer_hasher.update(Sha256::digest(&deposits_bytes));
     }
 
     // Withdrawal requests (type 0x01)
+    let mut withdrawals_bytes = vec![0x01u8];
     for withdrawal in requests.withdrawals.iter() {
-        data.push(0x01);
-        data.extend(withdrawal.as_ssz_bytes());
+        withdrawals_bytes.extend(withdrawal.as_ssz_bytes());
+    }
+    if withdrawals_bytes.len() > 1 {
+        outer_hasher.update(Sha256::digest(&withdrawals_bytes));
     }
 
     // Consolidation requests (type 0x02)
+    let mut consolidations_bytes = vec![0x02u8];
     for consolidation in requests.consolidations.iter() {
-        data.push(0x02);
-        data.extend(consolidation.as_ssz_bytes());
+        consolidations_bytes.extend(consolidation.as_ssz_bytes());
+    }
+    if consolidations_bytes.len() > 1 {
+        outer_hasher.update(Sha256::digest(&consolidations_bytes));
     }
 
-    if data.is_empty() {
-        B256::ZERO
-    } else {
-        keccak256(&data)
-    }
+    B256::from_slice(&outer_hasher.finalize())
 }
 
 // ============================================================================

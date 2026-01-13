@@ -6940,6 +6940,7 @@ dependencies = [
  "reth-stateless",
  "serde",
  "serde_with",
+ "sha2",
  "sparsestate",
  "ssz_types",
  "stateless-validator-common",
