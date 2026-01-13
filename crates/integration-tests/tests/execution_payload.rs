@@ -25,6 +25,9 @@ fn test_stateless_input_to_execution_payload() {
     // TODO: move this kind of tests to have independent assertion in stateless-validator-*.rs integration tests.
     let expected_roots = expected_execution_payload_tree_roots();
     for fixture in get_fixtures() {
+        if !fixture.success {
+            continue;
+        }
         let genesis = Genesis {
             config: fixture.stateless_input.chain_config.clone(),
             ..Default::default()
@@ -64,6 +67,9 @@ fn test_stateless_input_to_execution_payload() {
 #[test]
 fn test_block_roundtrip() {
     for fixture in get_fixtures() {
+        if !fixture.success {
+            continue;
+        }
         let genesis = Genesis {
             config: fixture.stateless_input.chain_config.clone(),
             ..Default::default()

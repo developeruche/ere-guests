@@ -55,26 +55,12 @@ pub fn new_payload_request_to_block(
     chain_spec: Arc<ChainSpec>,
 ) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>> {
     let execution_data = new_payload_request_to_execution_data(new_payload_request);
-    println!("execution data : {:?}", execution_data);
-    execution_data
-        .try_into_block()
-        .context("Payload validation failed")
+    let validator = EthereumExecutionPayloadValidator::new(chain_spec);
+    let sealed_block = validator
+        .ensure_well_formed_payload(execution_data)
+        .context("Payload validation failed")?;
+    Ok(sealed_block.into_block())
 }
-
-// /// Converts a [`NewPayloadRequest`] into a validated reth [`SealedBlock`].
-// ///
-// /// This converts the request to `ExecutionData`, then uses
-// /// `EthereumExecutionPayloadValidator` to validate the payload and return a sealed block.
-// pub fn new_payload_request_to_block(
-//     new_payload_request: NewPayloadRequest,
-//     chain_spec: Arc<ChainSpec>,
-// ) -> Result<SealedBlock<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>>> {
-//     let execution_data = new_payload_request_to_execution_data(new_payload_request);
-//     let validator = EthereumExecutionPayloadValidator::new(chain_spec);
-//     validator
-//         .ensure_well_formed_payload(execution_data)
-//         .context("Payload validation failed")
-// }
 
 // ============================================================================
 // Conversion: NewPayloadRequest -> ExecutionData
