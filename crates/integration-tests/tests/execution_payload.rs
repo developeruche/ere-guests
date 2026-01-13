@@ -1,31 +1,55 @@
 //! Test for StatelessInput <-> ExecutionPayload conversion
 //!
 //! The prover input data is StatelessInput constructed from debug_executionWitness.
-/// The guest program input is ExecutionData.
+/// The guest program input is NewPayloadRequest.
 ///
 /// The following tests check proper conversion between these types.
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use alloy_primitives::{B256, b256};
 use guest::Guest;
 use integration_tests::{NoopPlatform, get_fixtures};
+use reth_chainspec::ChainSpec;
+use reth_evm_ethereum::EthEvmConfig;
+use reth_stateless::{Genesis, stateless_validation, stateless_validation_with_trie};
 use stateless_validator_reth::{
     execution_payload::new_payload_request_to_block,
     guest::{StatelessValidatorRethGuest, StatelessValidatorRethInput},
-    host::to_execution_data,
+    host::to_new_payload_request,
 };
 
 /// Verify that StatelessInput is converted to ExecutionPayload correctly against precomputed roots.
-/// This verifies that StatelessInput -> ExecutionData -> ExecutionPaylaod is correct.
+/// This verifies that StatelessInput -> NewPayloadRequest is correct.
 #[test]
 fn test_stateless_input_to_execution_payload() {
     // TODO: move this kind of tests to have independent assertion in stateless-validator-*.rs integration tests.
     let expected_roots = expected_execution_payload_tree_roots();
     for fixture in get_fixtures() {
+        let genesis = Genesis {
+            config: fixture.stateless_input.chain_config.clone(),
+            ..Default::default()
+        };
+        let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
+        let evm_config = EthEvmConfig::new(chain_spec.clone());
+        let signers = stateless_validator_reth::host::recover_signers(
+            &fixture.stateless_input.block.body.transactions,
+        )
+        .unwrap();
+        let (_, out) = stateless_validation(
+            fixture.stateless_input.block.clone(),
+            signers,
+            fixture.stateless_input.witness.clone(),
+            chain_spec,
+            evm_config,
+        )
+        .unwrap();
+
         let block_hash = fixture.stateless_input.block.hash_slow();
         let expected_root = *expected_roots.get(&block_hash).unwrap();
 
-        let input = StatelessValidatorRethInput::new(&fixture.stateless_input).unwrap();
+        let input =
+            StatelessValidatorRethInput::new(&fixture.stateless_input, out.requests.clone())
+                .unwrap();
         let output = StatelessValidatorRethGuest::compute::<NoopPlatform>(input);
 
         assert_eq!(
@@ -35,19 +59,39 @@ fn test_stateless_input_to_execution_payload() {
     }
 }
 
-// The guest program input is ExecutionData, but the prover input is StatelessInput.
+// The guest program input is NewPayloadRequest, but the prover input is StatelessInput.
 // This test verifies that the guest program reconstructs the same block as the original StatelessInput.
 #[test]
-fn test_block_rountrip() {
+fn test_block_roundtrip() {
     for fixture in get_fixtures() {
-        // Simulate the preparation the prover does to send input to the guest.
-        let execution_data = to_execution_data(&fixture.stateless_input);
+        let genesis = Genesis {
+            config: fixture.stateless_input.chain_config.clone(),
+            ..Default::default()
+        };
+        let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
+        let evm_config = EthEvmConfig::new(chain_spec.clone());
+        let signers = stateless_validator_reth::host::recover_signers(
+            &fixture.stateless_input.block.body.transactions,
+        )
+        .unwrap();
+        let (_, out) = stateless_validation(
+            fixture.stateless_input.block.clone(),
+            signers,
+            fixture.stateless_input.witness.clone(),
+            chain_spec.clone(),
+            evm_config,
+        )
+        .unwrap();
 
-        // In the guest, reconstruct the block from ExecutionData.
-        let guest_block = new_payload_request_to_block(execution_data).unwrap();
+        // Simulate the preparation the prover does to send input to the guest.
+        let new_payload_request =
+            to_new_payload_request(&fixture.stateless_input, out.requests.clone()).unwrap();
+
+        // In the guest, reconstruct the block from NewPayloadRequest.
+        let block = new_payload_request_to_block(new_payload_request, chain_spec).unwrap();
 
         // Assert that the reconstructed block matches the original block in StatelessInput.
-        let guest_block_hash = guest_block.hash_slow();
+        let guest_block_hash = block.hash_slow();
         let stateless_input_block_hash = fixture.stateless_input.block.hash_slow();
         assert_eq!(
             stateless_input_block_hash, guest_block_hash,

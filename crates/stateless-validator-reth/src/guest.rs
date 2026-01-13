@@ -3,11 +3,9 @@
 use alloc::{format, sync::Arc, vec::Vec};
 
 use alloy_genesis::ChainConfig;
-use alloy_rpc_types_engine::ExecutionData;
 use ere_io::serde::{IoSerde, bincode::BincodeLegacy};
 use reth_chainspec::ChainSpec;
 use reth_evm_ethereum::EthEvmConfig;
-use reth_payload_validator::cancun::ensure_matching_blob_versioned_hashes;
 use reth_stateless::{
     ExecutionWitness, Genesis, UncompressedPublicKey, stateless_validation_with_trie,
 };
@@ -16,7 +14,7 @@ use serde_with::serde_as;
 use sparsestate::SparseState;
 use stateless_validator_common::execution_payload::NewPayloadRequest;
 
-use crate::execution_payload::{create_new_payload_request, new_payload_request_to_block};
+use crate::execution_payload::new_payload_request_to_block;
 
 #[rustfmt::skip]
 pub use {
@@ -51,18 +49,21 @@ impl Guest for StatelessValidatorRethGuest {
     type Io = StatelessValidatorRethIo;
 
     fn compute<P: Platform>(input: GuestInput<Self>) -> GuestOutput<Self> {
-        let cancun_sidecar = input.new_payload_request.sidecar.cancun().cloned();
+        let new_payload_request_root = input.new_payload_request.tree_hash_root();
+
         let (chain_spec, evm_config, block_result) =
             P::cycle_scope("validation_inputs_preparation", || {
                 let genesis = Genesis {
-                    config: input.chain_config,
+                    config: input.chain_config.clone(),
                     ..Default::default()
                 };
                 let chain_spec: Arc<ChainSpec> = Arc::new(genesis.into());
                 let evm_config = EthEvmConfig::new(chain_spec.clone());
-                let block_result = new_payload_request_to_block(input.new_payload_request.clone());
+                let block_result =
+                    new_payload_request_to_block(input.new_payload_request, chain_spec.clone());
                 (chain_spec, evm_config, block_result)
             });
+
         let block = match block_result {
             Ok(block) => block,
             Err(err) => {
@@ -70,14 +71,6 @@ impl Guest for StatelessValidatorRethGuest {
                 return StatelessValidatorOutput::default(); // TODO
             }
         };
-
-        // Validate versioned_hashes with the block transactions.
-        if let Err(err) =
-            ensure_matching_blob_versioned_hashes(&block.body, cancun_sidecar.as_ref())
-        {
-            P::print(&format!("Versioned hashes validation failed: {err}\n"));
-            return StatelessValidatorOutput::default(); // TODO
-        }
 
         let res = P::cycle_scope("validation", || {
             stateless_validation_with_trie::<SparseState, _, _>(
@@ -90,7 +83,11 @@ impl Guest for StatelessValidatorRethGuest {
         });
 
         match res {
-            Ok((_, output)) => StatelessValidatorOutput::new(&input.new_payload_request, true),
+            Ok(_) => StatelessValidatorOutput {
+                // TODO: change to use constructor
+                new_payload_request_root,
+                successful_block_validation: true,
+            },
             Err(err) => {
                 P::print(&format!("Block validation failed: {err}\n"));
                 StatelessValidatorOutput::default() // TODO

@@ -1,18 +1,18 @@
-//! Experimental ExecutionPayloadHeader tree hash computation from ExecutionData.
+//! Execution payload types for zkVM guest programs.
 //!
-//! This module provides functionality to compute the SSZ tree hash root of an
-//! ExecutionPayloadHeader directly from alloy's ExecutionData type.
+//! This module provides execution payload types that store full transaction and
+//! withdrawal data (not just tree roots), enabling conversion to alloy types.
 
-// TODO
-// Allow missing docs for experimental module
 #![allow(missing_docs)]
+
+use alloc::vec::Vec;
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_with::{Bytes, serde_as};
 use ssz::{Decode, Encode};
 use ssz_types::{FixedVector, VariableList};
-use tree_hash::TreeHash;
+use tree_hash::{Hash256, TreeHash, TreeHashType, merkle_root, mix_in_length};
 use tree_hash_derive::TreeHash;
 
 // Type aliases for SSZ-compatible primitives that implement TreeHash
@@ -35,9 +35,19 @@ pub type MaxConsolidationRequestsPerPayload = typenum::U2; // 2^1
 pub type Bytes48 = [u8; 48];
 pub type Bytes96 = [u8; 96];
 
-// Constants for zero-copy transaction root computation
+// Constants for transaction root computation
 pub const MAX_BYTES_PER_TRANSACTION: usize = 1 << 30; // 2^30
 pub const MAX_TRANSACTIONS_PER_PAYLOAD: usize = 1 << 20; // 2^20
+const BYTES_PER_CHUNK: usize = 32;
+
+/// Withdrawal struct (neutral type compatible with both Reth and Ethrex)
+#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+pub struct Withdrawal {
+    pub index: u64,
+    pub validator_index: u64,
+    pub address: Address20,
+    pub amount: u64,
+}
 
 /// DepositRequest from EIP-6110: Supply validator deposits on chain
 #[serde_as]
@@ -96,9 +106,10 @@ pub enum ForkName {
     Electra,
 }
 
-/// ExecutionPayloadHeaderV1
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
-pub struct ExecutionPayloadHeaderV1 {
+/// ExecutionPayloadV1 (Bellatrix)
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionPayloadV1 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
     pub state_root: Hash32,
@@ -112,12 +123,14 @@ pub struct ExecutionPayloadHeaderV1 {
     pub extra_data: ExtraData,
     pub base_fee_per_gas: Uint256Bytes,
     pub block_hash: Hash32,
-    pub transactions_root: Hash32,
+    #[serde_as(as = "Vec<Bytes>")]
+    pub transactions: Vec<Vec<u8>>,
 }
 
-/// ExecutionPayloadHeaderV2
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
-pub struct ExecutionPayloadHeaderV2 {
+/// ExecutionPayloadV2 (Capella)
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionPayloadV2 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
     pub state_root: Hash32,
@@ -131,13 +144,15 @@ pub struct ExecutionPayloadHeaderV2 {
     pub extra_data: ExtraData,
     pub base_fee_per_gas: Uint256Bytes,
     pub block_hash: Hash32,
-    pub transactions_root: Hash32,
-    pub withdrawals_root: Hash32,
+    #[serde_as(as = "Vec<Bytes>")]
+    pub transactions: Vec<Vec<u8>>,
+    pub withdrawals: Vec<Withdrawal>,
 }
 
-/// ExecutionPayloadHeaderV3
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
-pub struct ExecutionPayloadHeaderV3 {
+/// ExecutionPayloadV3 (Deneb/Electra)
+#[serde_as]
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ExecutionPayloadV3 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
     pub state_root: Hash32,
@@ -151,32 +166,237 @@ pub struct ExecutionPayloadHeaderV3 {
     pub extra_data: ExtraData,
     pub base_fee_per_gas: Uint256Bytes,
     pub block_hash: Hash32,
-    pub transactions_root: Hash32,
-    pub withdrawals_root: Hash32,
+    #[serde_as(as = "Vec<Bytes>")]
+    pub transactions: Vec<Vec<u8>>,
+    pub withdrawals: Vec<Withdrawal>,
     pub blob_gas_used: u64,
     pub excess_blob_gas: u64,
 }
 
+/// Computes the SSZ tree hash root of the transactions list.
+fn compute_transactions_root(transactions: &[Vec<u8>]) -> Hash32 {
+    let tx_leaf_limit = MAX_BYTES_PER_TRANSACTION / BYTES_PER_CHUNK;
+
+    let tx_roots: Vec<Hash256> = transactions
+        .iter()
+        .map(|tx| {
+            let root = merkle_root(tx.as_ref(), tx_leaf_limit);
+            mix_in_length(&root, tx.len())
+        })
+        .collect();
+
+    let roots_bytes: Vec<u8> = tx_roots.iter().flat_map(|h| h.0).collect();
+    let list_root = merkle_root(&roots_bytes, MAX_TRANSACTIONS_PER_PAYLOAD);
+    mix_in_length(&list_root, transactions.len()).0
+}
+
+/// Computes the SSZ tree hash root of the withdrawals list.
+fn compute_withdrawals_root(withdrawals: &[Withdrawal]) -> Hash32 {
+    type Withdrawals = VariableList<Withdrawal, MaxWithdrawalsPerPayload>;
+    Withdrawals::from(withdrawals.to_vec()).tree_hash_root().0
+}
+
+impl TreeHash for ExecutionPayloadV1 {
+    fn tree_hash_type() -> TreeHashType {
+        TreeHashType::Container
+    }
+
+    fn tree_hash_packed_encoding(&self) -> tree_hash::PackedEncoding {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_packing_factor() -> usize {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_root(&self) -> Hash256 {
+        // Compute transactions root from actual data
+        let transactions_root = compute_transactions_root(&self.transactions);
+
+        // Build header struct for tree hashing
+        #[derive(TreeHash)]
+        struct HeaderV1 {
+            parent_hash: Hash32,
+            fee_recipient: Address20,
+            state_root: Hash32,
+            receipts_root: Hash32,
+            logs_bloom: LogsBloom,
+            prev_randao: Hash32,
+            block_number: u64,
+            gas_limit: u64,
+            gas_used: u64,
+            timestamp: u64,
+            extra_data: ExtraData,
+            base_fee_per_gas: Uint256Bytes,
+            block_hash: Hash32,
+            transactions_root: Hash32,
+        }
+
+        let header = HeaderV1 {
+            parent_hash: self.parent_hash,
+            fee_recipient: self.fee_recipient,
+            state_root: self.state_root,
+            receipts_root: self.receipts_root,
+            logs_bloom: self.logs_bloom.clone(),
+            prev_randao: self.prev_randao,
+            block_number: self.block_number,
+            gas_limit: self.gas_limit,
+            gas_used: self.gas_used,
+            timestamp: self.timestamp,
+            extra_data: self.extra_data.clone(),
+            base_fee_per_gas: self.base_fee_per_gas,
+            block_hash: self.block_hash,
+            transactions_root,
+        };
+
+        header.tree_hash_root()
+    }
+}
+
+impl TreeHash for ExecutionPayloadV2 {
+    fn tree_hash_type() -> TreeHashType {
+        TreeHashType::Container
+    }
+
+    fn tree_hash_packed_encoding(&self) -> tree_hash::PackedEncoding {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_packing_factor() -> usize {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_root(&self) -> Hash256 {
+        let transactions_root = compute_transactions_root(&self.transactions);
+        let withdrawals_root = compute_withdrawals_root(&self.withdrawals);
+
+        #[derive(TreeHash)]
+        struct HeaderV2 {
+            parent_hash: Hash32,
+            fee_recipient: Address20,
+            state_root: Hash32,
+            receipts_root: Hash32,
+            logs_bloom: LogsBloom,
+            prev_randao: Hash32,
+            block_number: u64,
+            gas_limit: u64,
+            gas_used: u64,
+            timestamp: u64,
+            extra_data: ExtraData,
+            base_fee_per_gas: Uint256Bytes,
+            block_hash: Hash32,
+            transactions_root: Hash32,
+            withdrawals_root: Hash32,
+        }
+
+        let header = HeaderV2 {
+            parent_hash: self.parent_hash,
+            fee_recipient: self.fee_recipient,
+            state_root: self.state_root,
+            receipts_root: self.receipts_root,
+            logs_bloom: self.logs_bloom.clone(),
+            prev_randao: self.prev_randao,
+            block_number: self.block_number,
+            gas_limit: self.gas_limit,
+            gas_used: self.gas_used,
+            timestamp: self.timestamp,
+            extra_data: self.extra_data.clone(),
+            base_fee_per_gas: self.base_fee_per_gas,
+            block_hash: self.block_hash,
+            transactions_root,
+            withdrawals_root,
+        };
+
+        header.tree_hash_root()
+    }
+}
+
+impl TreeHash for ExecutionPayloadV3 {
+    fn tree_hash_type() -> TreeHashType {
+        TreeHashType::Container
+    }
+
+    fn tree_hash_packed_encoding(&self) -> tree_hash::PackedEncoding {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_packing_factor() -> usize {
+        unreachable!("Container types should not be packed")
+    }
+
+    fn tree_hash_root(&self) -> Hash256 {
+        let transactions_root = compute_transactions_root(&self.transactions);
+        let withdrawals_root = compute_withdrawals_root(&self.withdrawals);
+
+        #[derive(TreeHash)]
+        struct HeaderV3 {
+            parent_hash: Hash32,
+            fee_recipient: Address20,
+            state_root: Hash32,
+            receipts_root: Hash32,
+            logs_bloom: LogsBloom,
+            prev_randao: Hash32,
+            block_number: u64,
+            gas_limit: u64,
+            gas_used: u64,
+            timestamp: u64,
+            extra_data: ExtraData,
+            base_fee_per_gas: Uint256Bytes,
+            block_hash: Hash32,
+            transactions_root: Hash32,
+            withdrawals_root: Hash32,
+            blob_gas_used: u64,
+            excess_blob_gas: u64,
+        }
+
+        let header = HeaderV3 {
+            parent_hash: self.parent_hash,
+            fee_recipient: self.fee_recipient,
+            state_root: self.state_root,
+            receipts_root: self.receipts_root,
+            logs_bloom: self.logs_bloom.clone(),
+            prev_randao: self.prev_randao,
+            block_number: self.block_number,
+            gas_limit: self.gas_limit,
+            gas_used: self.gas_used,
+            timestamp: self.timestamp,
+            extra_data: self.extra_data.clone(),
+            base_fee_per_gas: self.base_fee_per_gas,
+            block_hash: self.block_hash,
+            transactions_root,
+            withdrawals_root,
+            blob_gas_used: self.blob_gas_used,
+            excess_blob_gas: self.excess_blob_gas,
+        };
+
+        header.tree_hash_root()
+    }
+}
+
+// ============================================================================
+// NewPayloadRequest types
+// ============================================================================
+
 #[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestBellatrix {
-    pub execution_payload_header: ExecutionPayloadHeaderV1,
+    pub execution_payload: ExecutionPayloadV1,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestCapella {
-    pub execution_payload_header: ExecutionPayloadHeaderV2,
+    pub execution_payload: ExecutionPayloadV2,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestDeneb {
-    pub execution_payload_header: ExecutionPayloadHeaderV3,
+    pub execution_payload: ExecutionPayloadV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
 pub struct NewPayloadRequestElectra {
-    pub execution_payload_header: ExecutionPayloadHeaderV3,
+    pub execution_payload: ExecutionPayloadV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
     pub execution_requests: ExecutionRequests,
@@ -191,60 +411,93 @@ pub enum NewPayloadRequest {
 }
 
 impl NewPayloadRequest {
-    pub fn new_bellatrix(execution_payload_header: ExecutionPayloadHeaderV1) -> Self {
-        NewPayloadRequest::Bellatrix(NewPayloadRequestBellatrix {
-            execution_payload_header,
-        })
+    pub fn new_bellatrix(execution_payload: ExecutionPayloadV1) -> Self {
+        NewPayloadRequest::Bellatrix(NewPayloadRequestBellatrix { execution_payload })
     }
 
-    pub fn new_capella(execution_payload_header: ExecutionPayloadHeaderV2) -> Self {
-        NewPayloadRequest::Capella(NewPayloadRequestCapella {
-            execution_payload_header,
-        })
+    pub fn new_capella(execution_payload: ExecutionPayloadV2) -> Self {
+        NewPayloadRequest::Capella(NewPayloadRequestCapella { execution_payload })
     }
 
     pub fn new_deneb(
-        execution_payload_header: ExecutionPayloadHeaderV3,
+        execution_payload: ExecutionPayloadV3,
         versioned_hashes: Vec<Hash32>,
         parent_beacon_block_root: Hash32,
     ) -> Result<Self> {
-        let versioned_hashes = VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
-            "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
-            err)
-        )?;
+        let versioned_hashes =
+            VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(
+                |err| {
+                    anyhow::anyhow!(
+                    "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
+                    err
+                )
+                },
+            )?;
         Ok(NewPayloadRequest::Deneb(NewPayloadRequestDeneb {
-            execution_payload_header,
+            execution_payload,
             versioned_hashes,
             parent_beacon_block_root,
         }))
     }
 
     pub fn new_electra(
-        execution_payload_header: ExecutionPayloadHeaderV3,
+        execution_payload: ExecutionPayloadV3,
         versioned_hashes: Vec<Hash32>,
         parent_beacon_block_root: Hash32,
         execution_requests: &[impl AsRef<[u8]>],
     ) -> Result<Self> {
-        let versioned_hashes = VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
-            "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
-            err)
-        )?;
+        let versioned_hashes =
+            VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(
+                |err| {
+                    anyhow::anyhow!(
+                    "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
+                    err
+                )
+                },
+            )?;
         let execution_requests = decode_execution_requests(execution_requests)
             .context("Decoding execution requests failed")?;
         Ok(NewPayloadRequest::Electra(NewPayloadRequestElectra {
-            execution_payload_header,
+            execution_payload,
             versioned_hashes,
             parent_beacon_block_root,
             execution_requests,
         }))
     }
 
+    /// Returns the tree hash root of this request.
     pub fn tree_hash_root(&self) -> [u8; 32] {
         match self {
             NewPayloadRequest::Bellatrix(req) => req.tree_hash_root().0,
             NewPayloadRequest::Capella(req) => req.tree_hash_root().0,
             NewPayloadRequest::Deneb(req) => req.tree_hash_root().0,
             NewPayloadRequest::Electra(req) => req.tree_hash_root().0,
+        }
+    }
+
+    /// Returns the versioned hashes if this is a Deneb or Electra request.
+    pub fn versioned_hashes(&self) -> Option<&VariableList<Hash32, MaxBlobCommitmentsPerBlock>> {
+        match self {
+            NewPayloadRequest::Bellatrix(_) | NewPayloadRequest::Capella(_) => None,
+            NewPayloadRequest::Deneb(req) => Some(&req.versioned_hashes),
+            NewPayloadRequest::Electra(req) => Some(&req.versioned_hashes),
+        }
+    }
+
+    /// Returns the parent beacon block root if this is a Deneb or Electra request.
+    pub fn parent_beacon_block_root(&self) -> Option<Hash32> {
+        match self {
+            NewPayloadRequest::Bellatrix(_) | NewPayloadRequest::Capella(_) => None,
+            NewPayloadRequest::Deneb(req) => Some(req.parent_beacon_block_root),
+            NewPayloadRequest::Electra(req) => Some(req.parent_beacon_block_root),
+        }
+    }
+
+    /// Returns the execution requests if this is an Electra request.
+    pub fn execution_requests(&self) -> Option<&ExecutionRequests> {
+        match self {
+            NewPayloadRequest::Electra(req) => Some(&req.execution_requests),
+            _ => None,
         }
     }
 }

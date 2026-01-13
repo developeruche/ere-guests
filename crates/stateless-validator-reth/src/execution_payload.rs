@@ -1,20 +1,25 @@
-//! Reth -> ExecutionPayload conversion.
+//! Execution payload conversion between NewPayloadRequest and alloy types.
 
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 
-use alloy_eips::{eip4895::Withdrawal, eip7685::Requests};
+use alloy_eips::eip4895::Withdrawal as AlloyWithdrawal;
 use alloy_genesis::ChainConfig;
-use alloy_primitives::Bytes;
-use alloy_rpc_types_engine::{ExecutionData, ExecutionPayload, PayloadError};
-use anyhow::Result;
+use alloy_primitives::{Address, B256, Bloom, Bytes, U256};
+use alloy_rpc_types_engine::{
+    CancunPayloadFields, ExecutionData, ExecutionPayload as AlloyExecutionPayload,
+    ExecutionPayloadSidecar, ExecutionPayloadV1 as AlloyExecutionPayloadV1,
+    ExecutionPayloadV2 as AlloyExecutionPayloadV2, ExecutionPayloadV3 as AlloyExecutionPayloadV3,
+    PayloadError,
+};
+use anyhow::{Context, Result};
+use reth_chainspec::ChainSpec;
+use reth_ethereum_payload_builder::EthereumExecutionPayloadValidator;
+use reth_primitives_traits::SealedBlock;
 use ssz_types::{FixedVector, VariableList};
 use stateless_validator_common::execution_payload::{
-    Address20, ExecutionPayloadHeaderV1, ExecutionPayloadHeaderV2, ExecutionPayloadHeaderV3,
-    ForkName, Hash32, MAX_BYTES_PER_TRANSACTION, MAX_TRANSACTIONS_PER_PAYLOAD,
-    MaxWithdrawalsPerPayload, NewPayloadRequest,
+    ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkName, NewPayloadRequest,
+    Withdrawal,
 };
-use tree_hash::{BYTES_PER_CHUNK, Hash256, TreeHash, merkle_root, mix_in_length};
-use tree_hash_derive::TreeHash;
 
 /// Determines the fork name based on alloy chain config and block timestamp.
 pub fn determine_fork_name(chain_config: &ChainConfig, timestamp: u64) -> ForkName {
@@ -41,27 +46,261 @@ pub fn determine_fork_name(chain_config: &ChainConfig, timestamp: u64) -> ForkNa
     ForkName::Bellatrix
 }
 
-/// Converts an [`ExecutionData`] into a reth [`Block`].
+/// Converts a [`NewPayloadRequest`] into a validated reth [`SealedBlock`].
 ///
-/// This uses alloy's built-in `try_into_block` method to decode the execution
-/// payload transactions and construct a block.
+/// This converts the request to `ExecutionData`, then uses
+/// `EthereumExecutionPayloadValidator` to validate the payload and return a sealed block.
 pub fn new_payload_request_to_block(
     new_payload_request: NewPayloadRequest,
-) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>, PayloadError> {
-    // TODO: map new_payload_request to alloy_rpc_types_engine.
-
-    execution_data.try_into_block()
+    chain_spec: Arc<ChainSpec>,
+) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>> {
+    let execution_data = new_payload_request_to_execution_data(new_payload_request);
+    println!("execution data : {:?}", execution_data);
+    execution_data
+        .try_into_block()
+        .context("Payload validation failed")
 }
 
-/// Creates a new execution payload request.
+// /// Converts a [`NewPayloadRequest`] into a validated reth [`SealedBlock`].
+// ///
+// /// This converts the request to `ExecutionData`, then uses
+// /// `EthereumExecutionPayloadValidator` to validate the payload and return a sealed block.
+// pub fn new_payload_request_to_block(
+//     new_payload_request: NewPayloadRequest,
+//     chain_spec: Arc<ChainSpec>,
+// ) -> Result<SealedBlock<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>>> {
+//     let execution_data = new_payload_request_to_execution_data(new_payload_request);
+//     let validator = EthereumExecutionPayloadValidator::new(chain_spec);
+//     validator
+//         .ensure_well_formed_payload(execution_data)
+//         .context("Payload validation failed")
+// }
+
+// ============================================================================
+// Conversion: NewPayloadRequest -> ExecutionData
+// ============================================================================
+
+/// Converts a [`NewPayloadRequest`] into an alloy [`ExecutionData`].
+pub fn new_payload_request_to_execution_data(req: NewPayloadRequest) -> ExecutionData {
+    match req {
+        NewPayloadRequest::Bellatrix(b) => {
+            let v1 = convert_v1_to_alloy(b.execution_payload);
+            ExecutionData::new(
+                AlloyExecutionPayload::V1(v1),
+                ExecutionPayloadSidecar::none(),
+            )
+        }
+        NewPayloadRequest::Capella(c) => {
+            let (v1, withdrawals) = convert_v2_to_alloy(c.execution_payload);
+            let v2 = AlloyExecutionPayloadV2 {
+                payload_inner: v1,
+                withdrawals,
+            };
+            ExecutionData::new(
+                AlloyExecutionPayload::V2(v2),
+                ExecutionPayloadSidecar::none(),
+            )
+        }
+        NewPayloadRequest::Deneb(d) => {
+            let (v1, withdrawals) = convert_v2_to_alloy_from_v3(&d.execution_payload);
+            let v3 = AlloyExecutionPayloadV3 {
+                payload_inner: AlloyExecutionPayloadV2 {
+                    payload_inner: v1,
+                    withdrawals,
+                },
+                blob_gas_used: d.execution_payload.blob_gas_used,
+                excess_blob_gas: d.execution_payload.excess_blob_gas,
+            };
+
+            let versioned_hashes: Vec<B256> = d
+                .versioned_hashes
+                .into_iter()
+                .map(|h| B256::from(h))
+                .collect();
+            let parent_beacon_block_root = B256::from(d.parent_beacon_block_root);
+            let cancun_fields =
+                CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes);
+            let sidecar = ExecutionPayloadSidecar::v3(cancun_fields);
+
+            ExecutionData::new(AlloyExecutionPayload::V3(v3), sidecar)
+        }
+        NewPayloadRequest::Electra(e) => {
+            let (v1, withdrawals) = convert_v2_to_alloy_from_v3(&e.execution_payload);
+            let v3 = AlloyExecutionPayloadV3 {
+                payload_inner: AlloyExecutionPayloadV2 {
+                    payload_inner: v1,
+                    withdrawals,
+                },
+                blob_gas_used: e.execution_payload.blob_gas_used,
+                excess_blob_gas: e.execution_payload.excess_blob_gas,
+            };
+
+            let versioned_hashes: Vec<B256> = e
+                .versioned_hashes
+                .into_iter()
+                .map(|h| B256::from(h))
+                .collect();
+            let parent_beacon_block_root = B256::from(e.parent_beacon_block_root);
+            let cancun_fields =
+                CancunPayloadFields::new(parent_beacon_block_root, versioned_hashes);
+
+            // For Electra, compute requests_hash from execution_requests
+            // The requests_hash is stored in the sidecar
+            let requests_hash = compute_requests_hash(&e.execution_requests);
+            let prague_fields = alloy_rpc_types_engine::PraguePayloadFields::new(requests_hash);
+            let sidecar = ExecutionPayloadSidecar::v4(cancun_fields, prague_fields);
+
+            ExecutionData::new(AlloyExecutionPayload::V3(v3), sidecar)
+        }
+    }
+}
+
+/// Converts ExecutionPayloadV1 to alloy's ExecutionPayloadV1
+fn convert_v1_to_alloy(payload: ExecutionPayloadV1) -> AlloyExecutionPayloadV1 {
+    AlloyExecutionPayloadV1 {
+        parent_hash: B256::from(payload.parent_hash),
+        fee_recipient: Address::from(payload.fee_recipient),
+        state_root: B256::from(payload.state_root),
+        receipts_root: B256::from(payload.receipts_root),
+        logs_bloom: Bloom::from_slice(&payload.logs_bloom[..]),
+        prev_randao: B256::from(payload.prev_randao),
+        block_number: payload.block_number,
+        gas_limit: payload.gas_limit,
+        gas_used: payload.gas_used,
+        timestamp: payload.timestamp,
+        extra_data: Bytes::from(payload.extra_data.to_vec()),
+        base_fee_per_gas: U256::from_le_bytes(payload.base_fee_per_gas),
+        block_hash: B256::from(payload.block_hash),
+        transactions: payload.transactions.into_iter().map(Bytes::from).collect(),
+    }
+}
+
+/// Converts ExecutionPayloadV2 to alloy's (V1, withdrawals)
+fn convert_v2_to_alloy(
+    payload: ExecutionPayloadV2,
+) -> (AlloyExecutionPayloadV1, Vec<AlloyWithdrawal>) {
+    let v1 = AlloyExecutionPayloadV1 {
+        parent_hash: B256::from(payload.parent_hash),
+        fee_recipient: Address::from(payload.fee_recipient),
+        state_root: B256::from(payload.state_root),
+        receipts_root: B256::from(payload.receipts_root),
+        logs_bloom: Bloom::from_slice(&payload.logs_bloom[..]),
+        prev_randao: B256::from(payload.prev_randao),
+        block_number: payload.block_number,
+        gas_limit: payload.gas_limit,
+        gas_used: payload.gas_used,
+        timestamp: payload.timestamp,
+        extra_data: Bytes::from(payload.extra_data.to_vec()),
+        base_fee_per_gas: U256::from_le_bytes(payload.base_fee_per_gas),
+        block_hash: B256::from(payload.block_hash),
+        transactions: payload.transactions.into_iter().map(Bytes::from).collect(),
+    };
+
+    let withdrawals = payload
+        .withdrawals
+        .into_iter()
+        .map(convert_withdrawal)
+        .collect();
+
+    (v1, withdrawals)
+}
+
+/// Converts ExecutionPayloadV3 to alloy's (V1, withdrawals) - used for Deneb/Electra
+fn convert_v2_to_alloy_from_v3(
+    payload: &ExecutionPayloadV3,
+) -> (AlloyExecutionPayloadV1, Vec<AlloyWithdrawal>) {
+    let v1 = AlloyExecutionPayloadV1 {
+        parent_hash: B256::from(payload.parent_hash),
+        fee_recipient: Address::from(payload.fee_recipient),
+        state_root: B256::from(payload.state_root),
+        receipts_root: B256::from(payload.receipts_root),
+        logs_bloom: Bloom::from_slice(&payload.logs_bloom[..]),
+        prev_randao: B256::from(payload.prev_randao),
+        block_number: payload.block_number,
+        gas_limit: payload.gas_limit,
+        gas_used: payload.gas_used,
+        timestamp: payload.timestamp,
+        extra_data: Bytes::from(payload.extra_data.to_vec()),
+        base_fee_per_gas: U256::from_le_bytes(payload.base_fee_per_gas),
+        block_hash: B256::from(payload.block_hash),
+        transactions: payload
+            .transactions
+            .iter()
+            .map(|tx| Bytes::from(tx.clone()))
+            .collect(),
+    };
+
+    let withdrawals = payload
+        .withdrawals
+        .iter()
+        .map(|w| convert_withdrawal(w.clone()))
+        .collect();
+
+    (v1, withdrawals)
+}
+
+/// Converts our Withdrawal to alloy's Withdrawal
+fn convert_withdrawal(w: Withdrawal) -> AlloyWithdrawal {
+    AlloyWithdrawal {
+        index: w.index,
+        validator_index: w.validator_index,
+        address: Address::from(w.address),
+        amount: w.amount,
+    }
+}
+
+/// Computes the requests hash for Electra from ExecutionRequests.
+/// This is a placeholder - the actual implementation depends on the EIP-7685 spec.
+fn compute_requests_hash(
+    requests: &stateless_validator_common::execution_payload::ExecutionRequests,
+) -> B256 {
+    use alloy_primitives::keccak256;
+    use ssz::Encode;
+
+    // EIP-7685: requests_hash = keccak256(request_type_0 ++ request_data_0 ++ ...)
+    // For now, we compute a simple hash of the SSZ-encoded requests
+    let mut data = Vec::new();
+
+    // Deposit requests (type 0x00)
+    for deposit in requests.deposits.iter() {
+        data.push(0x00);
+        data.extend(deposit.as_ssz_bytes());
+    }
+
+    // Withdrawal requests (type 0x01)
+    for withdrawal in requests.withdrawals.iter() {
+        data.push(0x01);
+        data.extend(withdrawal.as_ssz_bytes());
+    }
+
+    // Consolidation requests (type 0x02)
+    for consolidation in requests.consolidations.iter() {
+        data.push(0x02);
+        data.extend(consolidation.as_ssz_bytes());
+    }
+
+    if data.is_empty() {
+        B256::ZERO
+    } else {
+        keccak256(&data)
+    }
+}
+
+// ============================================================================
+// Conversion: ExecutionData -> NewPayloadRequest (for creating requests from blocks)
+// ============================================================================
+
+/// Creates a new execution payload request from ExecutionData.
+///
+/// This extracts the transaction and withdrawal data from the ExecutionData
+/// and creates the appropriate NewPayloadRequest variant.
 pub fn create_new_payload_request(
     execution_data: &ExecutionData,
-    requests: &Requests,
-) -> Result<NewPayloadRequest> {
+    requests: &alloy_eips::eip7685::Requests,
+) -> anyhow::Result<NewPayloadRequest> {
     match &execution_data.payload {
-        ExecutionPayload::V1(v1) => {
-            let transactions_root = compute_transactions_root(&v1.transactions);
-            let header = ExecutionPayloadHeaderV1 {
+        AlloyExecutionPayload::V1(v1) => {
+            let payload = ExecutionPayloadV1 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -75,16 +314,13 @@ pub fn create_new_payload_request(
                 extra_data: VariableList::from(v1.extra_data.to_vec()),
                 base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
                 block_hash: v1.block_hash.0,
-                transactions_root,
+                transactions: v1.transactions.iter().map(|tx| tx.to_vec()).collect(),
             };
-            Ok(NewPayloadRequest::new_bellatrix(header))
+            Ok(NewPayloadRequest::new_bellatrix(payload))
         }
-        ExecutionPayload::V2(v2) => {
-            // V2 is nested: v2.payload_inner contains V1 fields
+        AlloyExecutionPayload::V2(v2) => {
             let v1 = &v2.payload_inner;
-            let transactions_root = compute_transactions_root(&v1.transactions);
-            let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
-            let header = ExecutionPayloadHeaderV2 {
+            let payload = ExecutionPayloadV2 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -98,18 +334,19 @@ pub fn create_new_payload_request(
                 extra_data: VariableList::from(v1.extra_data.to_vec()),
                 base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
                 block_hash: v1.block_hash.0,
-                transactions_root,
-                withdrawals_root,
+                transactions: v1.transactions.iter().map(|tx| tx.to_vec()).collect(),
+                withdrawals: v2
+                    .withdrawals
+                    .iter()
+                    .map(convert_alloy_withdrawal)
+                    .collect(),
             };
-            Ok(NewPayloadRequest::new_capella(header))
+            Ok(NewPayloadRequest::new_capella(payload))
         }
-        ExecutionPayload::V3(v3) => {
-            // V3 is doubly nested: v3.payload_inner.payload_inner contains V1 fields
+        AlloyExecutionPayload::V3(v3) => {
             let v2 = &v3.payload_inner;
             let v1 = &v2.payload_inner;
-            let transactions_root = compute_transactions_root(&v1.transactions);
-            let withdrawals_root = compute_withdrawals_root(&v2.withdrawals);
-            let header = ExecutionPayloadHeaderV3 {
+            let payload = ExecutionPayloadV3 {
                 parent_hash: v1.parent_hash.0,
                 fee_recipient: v1.fee_recipient.0.0,
                 state_root: v1.state_root.0,
@@ -123,25 +360,34 @@ pub fn create_new_payload_request(
                 extra_data: VariableList::from(v1.extra_data.to_vec()),
                 base_fee_per_gas: v1.base_fee_per_gas.to_le_bytes(),
                 block_hash: v1.block_hash.0,
-                transactions_root,
-                withdrawals_root,
+                transactions: v1.transactions.iter().map(|tx| tx.to_vec()).collect(),
+                withdrawals: v2
+                    .withdrawals
+                    .iter()
+                    .map(convert_alloy_withdrawal)
+                    .collect(),
                 blob_gas_used: v3.blob_gas_used,
                 excess_blob_gas: v3.excess_blob_gas,
             };
+
             let sidecar = &execution_data.sidecar;
             match (sidecar.cancun(), sidecar.prague()) {
                 // Deneb
                 (Some(c), None) => {
                     let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
                     let parent_beacon_block_root = c.parent_beacon_block_root.0;
-                    NewPayloadRequest::new_deneb(header, versioned_hashes, parent_beacon_block_root)
+                    NewPayloadRequest::new_deneb(
+                        payload,
+                        versioned_hashes,
+                        parent_beacon_block_root,
+                    )
                 }
                 // Electra
                 (Some(c), Some(_)) => {
                     let versioned_hashes = c.versioned_hashes.iter().map(|h| h.0).collect();
                     let parent_beacon_block_root = c.parent_beacon_block_root.0;
                     NewPayloadRequest::new_electra(
-                        header,
+                        payload,
                         versioned_hashes,
                         parent_beacon_block_root,
                         requests,
@@ -153,51 +399,12 @@ pub fn create_new_payload_request(
     }
 }
 
-/// SSZ Withdrawal container for tree hash computation.
-#[derive(Debug, Clone, TreeHash)]
-struct SszWithdrawal {
-    index: u64,
-    validator_index: u64,
-    address: Address20,
-    amount: u64,
-}
-
-/// Computes the SSZ tree hash root of the transactions list.
-///
-/// This implementation avoids copying transaction bytes by computing the tree hash
-/// directly from borrowed slices using `tree_hash::merkle_root`.
-fn compute_transactions_root(transactions: &[Bytes]) -> Hash32 {
-    // For each transaction (List<uint8, MAX_BYTES_PER_TRANSACTION>):
-    // tree_hash = mix_in_length(merkle_root(bytes, limit/32), len)
-    let tx_leaf_limit = MAX_BYTES_PER_TRANSACTION / BYTES_PER_CHUNK;
-
-    let tx_roots: Vec<Hash256> = transactions
-        .iter()
-        .map(|tx| {
-            let root = merkle_root(tx.as_ref(), tx_leaf_limit);
-            mix_in_length(&root, tx.len())
-        })
-        .collect();
-
-    // For the outer list (List<Transaction, MAX_TRANSACTIONS_PER_PAYLOAD>):
-    // Concatenate the 32-byte roots and merkleize with the list limit
-    let roots_bytes: Vec<u8> = tx_roots.iter().flat_map(|h| h.0).collect();
-    let list_root = merkle_root(&roots_bytes, MAX_TRANSACTIONS_PER_PAYLOAD);
-    mix_in_length(&list_root, transactions.len()).0
-}
-
-/// Computes the SSZ tree hash root of the withdrawals list.
-fn compute_withdrawals_root(withdrawals: &[Withdrawal]) -> Hash32 {
-    type Withdrawals = VariableList<SszWithdrawal, MaxWithdrawalsPerPayload>;
-
-    let list: Vec<SszWithdrawal> = withdrawals
-        .iter()
-        .map(|w| SszWithdrawal {
-            index: w.index,
-            validator_index: w.validator_index,
-            address: w.address.0.0,
-            amount: w.amount,
-        })
-        .collect();
-    Withdrawals::from(list).tree_hash_root().0
+/// Converts alloy's Withdrawal to our Withdrawal
+fn convert_alloy_withdrawal(w: &AlloyWithdrawal) -> Withdrawal {
+    Withdrawal {
+        index: w.index,
+        validator_index: w.validator_index,
+        address: w.address.0.0,
+        amount: w.amount,
+    }
 }
