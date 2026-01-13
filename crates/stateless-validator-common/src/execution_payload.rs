@@ -192,7 +192,7 @@ impl NewExecutionPayloadRequest {
         versioned_hashes: Vec<Hash32>,
         parent_beacon_block_root: Hash32,
     ) -> Result<Self> {
-        let versioned_hashes = VariableList::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
+        let versioned_hashes = VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
             "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
             err)
         )?;
@@ -211,7 +211,7 @@ impl NewExecutionPayloadRequest {
         parent_beacon_block_root: Hash32,
         execution_requests: &[impl AsRef<[u8]>],
     ) -> Result<Self> {
-        let versioned_hashes = VariableList::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
+        let versioned_hashes = VariableList::<Hash32, MaxBlobCommitmentsPerBlock>::new(versioned_hashes).map_err(|err| anyhow::anyhow!(
             "Versioned hashes length should be within bounds for MaxBlobCommitmentsPerBlock: {:?}",
             err)
         )?;

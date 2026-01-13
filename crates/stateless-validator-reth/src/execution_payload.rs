@@ -2,7 +2,7 @@
 
 use alloc::vec::Vec;
 
-use alloy_eips::{eip4844::VersionedHashIter, eip4895::Withdrawal, eip7685::Requests};
+use alloy_eips::{eip4895::Withdrawal, eip7685::Requests};
 use alloy_genesis::ChainConfig;
 use alloy_primitives::Bytes;
 use alloy_rpc_types_engine::{ExecutionData, ExecutionPayload, PayloadError};
