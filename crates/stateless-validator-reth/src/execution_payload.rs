@@ -2,6 +2,7 @@
 
 use alloc::{sync::Arc, vec::Vec};
 
+use alloy_consensus::Block;
 use alloy_eips::eip4895::Withdrawal as AlloyWithdrawal;
 use alloy_genesis::ChainConfig;
 use alloy_primitives::{Address, B256, Bloom, Bytes, U256};
@@ -12,9 +13,9 @@ use alloy_rpc_types_engine::{
     PayloadError,
 };
 use anyhow::{Context, Result};
-use reth_chainspec::ChainSpec;
-use reth_ethereum_payload_builder::EthereumExecutionPayloadValidator;
-use reth_primitives_traits::SealedBlock;
+use reth_chainspec::{ChainSpec, EthereumHardforks};
+use reth_payload_validator::{cancun, prague, shanghai};
+use reth_primitives_traits::{Block as _, SealedBlock, SignedTransaction};
 use ssz_types::{FixedVector, VariableList};
 use stateless_validator_common::execution_payload::{
     ExecutionPayloadV1, ExecutionPayloadV2, ExecutionPayloadV3, ForkName, NewPayloadRequest,
@@ -55,11 +56,54 @@ pub fn new_payload_request_to_block(
     chain_spec: Arc<ChainSpec>,
 ) -> Result<alloy_consensus::Block<reth_ethereum_primitives::TransactionSigned>> {
     let execution_data = new_payload_request_to_execution_data(new_payload_request);
-    let validator = EthereumExecutionPayloadValidator::new(chain_spec);
-    let sealed_block = validator
-        .ensure_well_formed_payload(execution_data)
+    let sealed_block: SealedBlock<
+        Block<alloy_consensus::EthereumTxEnvelope<alloy_consensus::TxEip4844>>,
+    > = ensure_well_formed_payload(chain_spec, execution_data)
         .context("Payload validation failed")?;
     Ok(sealed_block.into_block())
+}
+
+pub fn ensure_well_formed_payload<ChainSpec, T>(
+    chain_spec: ChainSpec,
+    payload: ExecutionData,
+) -> Result<SealedBlock<Block<T>>, PayloadError>
+where
+    ChainSpec: EthereumHardforks,
+    T: SignedTransaction,
+{
+    let ExecutionData { payload, sidecar } = payload;
+
+    let expected_hash = payload.block_hash();
+
+    // First parse the block
+    let sealed_block = payload.try_into_block_with_sidecar(&sidecar)?.seal_slow();
+
+    // Ensure the hash included in the payload matches the block hash
+    if expected_hash != sealed_block.hash() {
+        return Err(PayloadError::BlockHash {
+            execution: sealed_block.hash(),
+            consensus: expected_hash,
+        });
+    }
+
+    shanghai::ensure_well_formed_fields(
+        sealed_block.body(),
+        chain_spec.is_shanghai_active_at_timestamp(sealed_block.timestamp),
+    )?;
+
+    cancun::ensure_well_formed_fields(
+        &sealed_block,
+        sidecar.cancun(),
+        chain_spec.is_cancun_active_at_timestamp(sealed_block.timestamp),
+    )?;
+
+    prague::ensure_well_formed_fields(
+        sealed_block.body(),
+        sidecar.prague(),
+        chain_spec.is_prague_active_at_timestamp(sealed_block.timestamp),
+    )?;
+
+    Ok(sealed_block)
 }
 
 // ============================================================================

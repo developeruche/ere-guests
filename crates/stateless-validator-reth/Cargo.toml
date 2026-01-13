@@ -26,12 +26,12 @@ alloy-rpc-types-engine = { workspace = true, default-features = false, features 
 
 # reth
 reth-chainspec.workspace = true
-reth-ethereum-payload-builder.workspace = true
+# reth-ethereum-payload-builder = { workspace = true, default-features = false }
+reth-payload-validator = { workspace = true, default-features = false }
 reth-ethereum-primitives.workspace = true
 reth-evm-ethereum.workspace = true
 reth-primitives-traits.workspace = true
 reth-stateless.workspace = true
-reth-payload-validator.workspace = true
 
 # lighthouse
 tree_hash = { workspace = true }
@@ -63,8 +63,4 @@ k256 = ["reth-stateless/k256"]
 secp256k1 = ["reth-stateless/secp256k1"]
 
 # host
-host = [
-    "std",
-    "stateless-validator-common/host",
-    "dep:ere-zkvm-interface",
-]
+host = ["std", "stateless-validator-common/host", "dep:ere-zkvm-interface"]
