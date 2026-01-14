@@ -25,7 +25,13 @@ stateless-validator-reth = { path = "../../../crates/stateless-validator-reth", 
 
 [patch.crates-io]
 radium = { git = "https://github.com/han0110/radium", branch = "feature/riscv32ima" }
-ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "181896944365e4b76dd6407c2d679fb844165dd6" }
+ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "f27ad12aa4cf16d6154f8501a5014d9d5ab26b34" }
+ethereum_ssz = { git = "https://github.com/han0110/ethereum_ssz", branch = "feature/no-std" }
+ethereum_ssz_derive = { git = "https://github.com/han0110/ethereum_ssz", branch = "feature/no-std" }
+ethereum_serde_utils = { git = "https://github.com/han0110/ethereum_serde_utils", branch = "feature/no-std" }
+tree_hash = { git = "https://github.com/jsign/tree_hash", rev = "2263d501c0765837ef099796f153ba323939e614" }
+tree_hash_derive = { git = "https://github.com/jsign/tree_hash", rev = "2263d501c0765837ef099796f153ba323939e614" }
+ssz_types = { git = "https://github.com/jsign/ssz_types", rev = "679b7ba3e7402df8f8441af2242a6117c91fc84a" }
 
 [profile.release]
 codegen-units = 1

@@ -52,7 +52,7 @@ sha2.workspace = true
 
 # local
 guest.workspace = true
-stateless-validator-common = { workspace = true, features = ["serde"] }
+stateless-validator-common = { workspace = true, default-features = false }
 
 [features]
 # guest

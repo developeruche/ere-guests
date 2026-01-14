@@ -78,13 +78,13 @@ ethrex-rpc = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d7085
 ethrex-vm = { git = "https://github.com/lambdaclass/ethrex.git", rev = "e6d70854d0fe3b0f29ed8961e5cbfc5de7bdd7d1", default-features = false }
 
 # lighthouse
-tree_hash = "0.10.0"
+tree_hash = { version = "0.10.0", default-features = false }
 tree_hash_derive = "0.10.0"
 ssz_types = { version = "0.11", default-features = false }
 typenum = { version = "1.18", default-features = false }
 
 # ssz
-ethereum_ssz = "0.9"
+ethereum_ssz = { version = "0.9", default-features = false }
 ethereum_ssz_derive = "0.9"
 
 # mpt
@@ -104,4 +104,10 @@ stateless-validator-ethrex = { path = "crates/stateless-validator-ethrex", defau
 stateless-validator-reth = { path = "crates/stateless-validator-reth", default-features = false }
 
 [patch.crates-io]
-ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "181896944365e4b76dd6407c2d679fb844165dd6" }
+ethereum_hashing = { git = "https://github.com/jsign/ethereum_hashing", rev = "f27ad12aa4cf16d6154f8501a5014d9d5ab26b34" }
+ethereum_ssz = { git = "https://github.com/han0110/ethereum_ssz", branch = "feature/no-std" }
+ethereum_ssz_derive = { git = "https://github.com/han0110/ethereum_ssz", branch = "feature/no-std" }
+ethereum_serde_utils = { git = "https://github.com/han0110/ethereum_serde_utils", branch = "feature/no-std" }
+tree_hash = { git = "https://github.com/jsign/tree_hash", rev = "2263d501c0765837ef099796f153ba323939e614" }
+tree_hash_derive = { git = "https://github.com/jsign/tree_hash", rev = "2263d501c0765837ef099796f153ba323939e614" }
+ssz_types = { git = "https://github.com/jsign/ssz_types", rev = "679b7ba3e7402df8f8441af2242a6117c91fc84a" }

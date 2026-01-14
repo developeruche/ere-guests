@@ -2,14 +2,49 @@
 
 #![allow(missing_docs)]
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
+#[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
-use serde_with::{Bytes, serde_as};
 use ssz_types::{FixedVector, VariableList};
 use tree_hash::TreeHash;
 use tree_hash_derive::TreeHash;
 use typenum::Prod;
+
+/// Helper module for serializing fixed-size byte arrays as hex strings.
+#[cfg(feature = "serde")]
+mod bytes_hex {
+    use alloc::vec::Vec;
+    use serde::{Deserialize, Deserializer, Serializer, de::Error};
+
+    pub(crate) fn serialize<S: Serializer, const N: usize>(
+        bytes: &[u8; N],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        if serializer.is_human_readable() {
+            serializer.serialize_str(&const_hex::encode_prefixed(bytes))
+        } else {
+            serializer.serialize_bytes(bytes)
+        }
+    }
+
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>, const N: usize>(
+        deserializer: D,
+    ) -> Result<[u8; N], D::Error> {
+        if deserializer.is_human_readable() {
+            let s: &str = Deserialize::deserialize(deserializer)?;
+            let bytes = const_hex::decode(s).map_err(D::Error::custom)?;
+            bytes.try_into().map_err(|v: Vec<u8>| {
+                D::Error::custom(alloc::format!("expected {} bytes, got {}", N, v.len()))
+            })
+        } else {
+            let bytes: Vec<u8> = Deserialize::deserialize(deserializer)?;
+            bytes.try_into().map_err(|v: Vec<u8>| {
+                D::Error::custom(alloc::format!("expected {} bytes, got {}", N, v.len()))
+            })
+        }
+    }
+}
 
 /// Primitive types
 pub type Hash32 = [u8; 32];
@@ -34,7 +69,8 @@ pub type Transaction = VariableList<u8, MaxBytesPerTransaction>;
 pub type Transactions = VariableList<Transaction, MaxTransactionsPerPayload>;
 pub type Withdrawals = VariableList<Withdrawal, MaxWithdrawalsPerPayload>;
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Withdrawal {
     pub index: u64,
     pub validator_index: u64,
@@ -42,44 +78,39 @@ pub struct Withdrawal {
     pub amount: u64,
 }
 
-#[serde_as]
-#[derive(
-    Debug, Clone, Serialize, Deserialize, TreeHash, ssz_derive::Encode, ssz_derive::Decode,
-)]
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct DepositRequest {
-    #[serde_as(as = "Bytes")]
+    #[cfg_attr(feature = "serde", serde(with = "bytes_hex"))]
     pub pubkey: Bytes48,
     pub withdrawal_credentials: Hash32,
     pub amount: u64,
-    #[serde_as(as = "Bytes")]
+    #[cfg_attr(feature = "serde", serde(with = "bytes_hex"))]
     pub signature: Bytes96,
     pub index: u64,
 }
 
-#[serde_as]
-#[derive(
-    Debug, Clone, Serialize, Deserialize, TreeHash, ssz_derive::Encode, ssz_derive::Decode,
-)]
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct WithdrawalRequest {
     pub source_address: Address20,
-    #[serde_as(as = "Bytes")]
+    #[cfg_attr(feature = "serde", serde(with = "bytes_hex"))]
     pub validator_pubkey: Bytes48,
     pub amount: u64,
 }
 
-#[serde_as]
-#[derive(
-    Debug, Clone, Serialize, Deserialize, TreeHash, ssz_derive::Encode, ssz_derive::Decode,
-)]
+#[derive(Debug, Clone, TreeHash, ssz_derive::Encode, ssz_derive::Decode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ConsolidationRequest {
     pub source_address: Address20,
-    #[serde_as(as = "Bytes")]
+    #[cfg_attr(feature = "serde", serde(with = "bytes_hex"))]
     pub source_pubkey: Bytes48,
-    #[serde_as(as = "Bytes")]
+    #[cfg_attr(feature = "serde", serde(with = "bytes_hex"))]
     pub target_pubkey: Bytes48,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, Default, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExecutionRequests {
     pub deposits: VariableList<DepositRequest, MaxDepositRequestsPerPayload>,
     pub withdrawals: VariableList<WithdrawalRequest, MaxWithdrawalRequestsPerPayload>,
@@ -95,7 +126,8 @@ pub enum ForkName {
     Fulu,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExecutionPayloadV1 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -113,7 +145,8 @@ pub struct ExecutionPayloadV1 {
     pub transactions: Transactions,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExecutionPayloadV2 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -132,7 +165,8 @@ pub struct ExecutionPayloadV2 {
     pub withdrawals: Withdrawals,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ExecutionPayloadV3 {
     pub parent_hash: Hash32,
     pub fee_recipient: Address20,
@@ -153,24 +187,28 @@ pub struct ExecutionPayloadV3 {
     pub excess_blob_gas: u64,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NewPayloadRequestBellatrix {
     pub execution_payload: ExecutionPayloadV1,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NewPayloadRequestCapella {
     pub execution_payload: ExecutionPayloadV2,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NewPayloadRequestDeneb {
     pub execution_payload: ExecutionPayloadV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
     pub parent_beacon_block_root: Hash32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NewPayloadRequestElectraFulu {
     pub execution_payload: ExecutionPayloadV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
@@ -178,7 +216,8 @@ pub struct NewPayloadRequestElectraFulu {
     pub execution_requests: ExecutionRequests,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, TreeHash)]
+#[derive(Debug, Clone, TreeHash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct NewPayloadRequestFulu {
     pub execution_payload: ExecutionPayloadV3,
     pub versioned_hashes: VariableList<Hash32, MaxBlobCommitmentsPerBlock>,
@@ -186,7 +225,8 @@ pub struct NewPayloadRequestFulu {
     pub execution_requests: ExecutionRequests,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum NewPayloadRequest {
     Bellatrix(NewPayloadRequestBellatrix),
     Capella(NewPayloadRequestCapella),
