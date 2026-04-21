@@ -1,4 +1,5 @@
 target
 .vscode
 .secrets
-/cpp/build.DS_Store
+/cpp/build
+.DS_Store
