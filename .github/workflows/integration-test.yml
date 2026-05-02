@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -17,7 +21,6 @@ jobs:
       fail-fast: false
       matrix:
         guest:
-          - block-encoding-length
           - empty
           - panic
           - stateless-validator-ethrex
@@ -87,6 +90,7 @@ jobs:
           RUST_LOG: info
           RAYON_NUM_THREADS: ${{ matrix.threads }}
           ERE_IMAGE_REGISTRY: ghcr.io/eth-act/ere
+          OPENVM_RUST_TOOLCHAIN: nightly-2025-10-30
         run: |
           cargo test --release --test ${{ matrix.guest }} -- ${{ matrix.zkvm }}
 

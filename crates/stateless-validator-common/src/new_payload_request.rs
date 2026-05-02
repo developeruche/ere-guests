@@ -43,6 +43,7 @@ pub const MAX_WITHDRAWAL_REQUESTS_PER_PAYLOAD: usize = 16;
 pub const MAX_CONSOLIDATION_REQUESTS_PER_PAYLOAD: usize = 2;
 
 /// Composite types
+pub type BlockAccessList = SszList<u8, MAX_BYTES_PER_TRANSACTION>;
 pub type Transaction = SszList<u8, MAX_BYTES_PER_TRANSACTION>;
 pub type Transactions = SszList<Transaction, MAX_TRANSACTIONS_PER_PAYLOAD>;
 pub type Withdrawals = SszList<Withdrawal, MAX_WITHDRAWALS_PER_PAYLOAD>;
@@ -108,7 +109,7 @@ pub struct ConsolidationRequest {
     pub target_pubkey: Bytes48,
 }
 
-#[derive(Debug, Clone, Default, HashTreeRoot)]
+#[derive(Debug, Clone, Default, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -133,9 +134,10 @@ pub enum ForkName {
     Deneb,
     Electra,
     Fulu,
+    Amsterdam,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -166,7 +168,7 @@ pub struct ExecutionPayloadV1 {
     pub transactions: Transactions,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -200,7 +202,7 @@ pub struct ExecutionPayloadV2 {
     pub withdrawals: Withdrawals,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -236,7 +238,47 @@ pub struct ExecutionPayloadV3 {
     pub excess_blob_gas: u64,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct ExecutionPayloadV4 {
+    pub parent_hash: Hash32,
+    pub fee_recipient: Address20,
+    pub state_root: Hash32,
+    pub receipts_root: Hash32,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::bytes_array"))]
+    pub logs_bloom: LogsBloom,
+    pub prev_randao: Hash32,
+    pub block_number: u64,
+    pub gas_limit: u64,
+    pub gas_used: u64,
+    pub timestamp: u64,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::ssz_list"))]
+    #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsSszList))]
+    pub extra_data: ExtraData,
+    pub base_fee_per_gas: Uint256Bytes,
+    pub block_hash: Hash32,
+    #[cfg_attr(
+        feature = "serde",
+        serde(with = "crate::serde_wrappers::nested_ssz_list")
+    )]
+    #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsNestedSszList))]
+    pub transactions: Transactions,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::ssz_list"))]
+    #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsSszList))]
+    pub withdrawals: Withdrawals,
+    pub blob_gas_used: u64,
+    pub excess_blob_gas: u64,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::ssz_list"))]
+    #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsSszList))]
+    pub block_access_list: BlockAccessList,
+    pub slot_number: u64,
+}
+
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -246,7 +288,7 @@ pub struct NewPayloadRequestBellatrix {
     pub execution_payload: ExecutionPayloadV1,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -256,7 +298,7 @@ pub struct NewPayloadRequestCapella {
     pub execution_payload: ExecutionPayloadV2,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -270,7 +312,7 @@ pub struct NewPayloadRequestDeneb {
     pub parent_beacon_block_root: Hash32,
 }
 
-#[derive(Debug, Clone, HashTreeRoot)]
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 #[cfg_attr(
     feature = "rkyv",
@@ -278,6 +320,21 @@ pub struct NewPayloadRequestDeneb {
 )]
 pub struct NewPayloadRequestElectraFulu {
     pub execution_payload: ExecutionPayloadV3,
+    #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::ssz_list"))]
+    #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsSszList))]
+    pub versioned_hashes: VersionedHashes,
+    pub parent_beacon_block_root: Hash32,
+    pub execution_requests: ExecutionRequests,
+}
+
+#[derive(Debug, Clone, HashTreeRoot, SszEncode, SszDecode)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "rkyv",
+    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
+)]
+pub struct NewPayloadRequestAmsterdam {
+    pub execution_payload: ExecutionPayloadV4,
     #[cfg_attr(feature = "serde", serde(with = "crate::serde_wrappers::ssz_list"))]
     #[cfg_attr(feature = "rkyv", rkyv(with = crate::rkyv_wrappers::AsSszList))]
     pub versioned_hashes: VersionedHashes,
@@ -296,6 +353,7 @@ pub enum NewPayloadRequest {
     Capella(NewPayloadRequestCapella),
     Deneb(NewPayloadRequestDeneb),
     ElectraFulu(NewPayloadRequestElectraFulu),
+    Amsterdam(NewPayloadRequestAmsterdam),
 }
 
 impl NewPayloadRequest {
@@ -305,6 +363,7 @@ impl NewPayloadRequest {
             NewPayloadRequest::Capella(req) => req.hash_tree_root(hasher),
             NewPayloadRequest::Deneb(req) => req.hash_tree_root(hasher),
             NewPayloadRequest::ElectraFulu(req) => req.hash_tree_root(hasher),
+            NewPayloadRequest::Amsterdam(req) => req.hash_tree_root(hasher),
         }
     }
 }

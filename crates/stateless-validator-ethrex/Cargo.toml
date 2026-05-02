@@ -11,7 +11,6 @@ workspace = true
 [dependencies]
 anyhow.workspace = true
 rkyv.workspace = true
-bytes.workspace = true
 
 # alloy
 alloy-consensus = { workspace = true, optional = true }
@@ -22,24 +21,19 @@ alloy-rlp = { workspace = true, optional = true }
 # ethrex
 ethrex-common.workspace = true
 ethrex-crypto.workspace = true
-ethrex-guest-program.workspace = true
-ethrex-rlp.workspace = true
+ethrex-guest-program = { workspace = true, features = ["eip-8025"] }
 ethrex-rpc = { workspace = true, optional = true }
-ethrex-vm.workspace = true
 
 # ssz
+libssz.workspace = true
 libssz_merkle.workspace = true
 
 # reth
 stateless = { workspace = true, optional = true }
 
-# ere
-ere-io = { workspace = true, features = ["rkyv"] }
-ere-zkvm-interface = { workspace = true, optional = true }
-
 # local
 guest.workspace = true
-stateless-validator-common = { workspace = true, features = ["rkyv"] }
+stateless-validator-common.workspace = true
 stateless-validator-reth = { workspace = true, default-features = true, optional = true, features = [
     "host",
 ] }
@@ -63,7 +57,6 @@ host = [
     "dep:alloy-eips",
     "dep:alloy-rlp",
     "dep:alloy-genesis",
-    "dep:ere-zkvm-interface",
     "dep:ethrex-rpc",
     "dep:stateless",
     "dep:stateless-validator-reth",

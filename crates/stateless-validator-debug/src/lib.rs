@@ -11,9 +11,7 @@ use clap::{Parser, ValueEnum};
 use guest::{Guest, Platform};
 use serde::Deserialize;
 use stateless::StatelessInput;
-use stateless_validator_ethrex::guest::{
-    StatelessValidatorEthrexGuest, StatelessValidatorEthrexInput,
-};
+use stateless_validator_ethrex::{guest::StatelessValidatorEthrexGuest, host::build_eip8025_input};
 use stateless_validator_reth::guest::{
     StatelessValidatorOutput, StatelessValidatorRethGuest, StatelessValidatorRethInput,
 };
@@ -56,8 +54,7 @@ impl GuestKind {
                 StatelessValidatorRethGuest::compute::<StdoutNoopPlatform>(input)
             }
             Self::Ethrex => {
-                let input =
-                    StatelessValidatorEthrexInput::new(&fixture.stateless_input, fixture.success)?;
+                let input = build_eip8025_input(&fixture.stateless_input, fixture.success)?;
                 StatelessValidatorEthrexGuest::compute::<StdoutNoopPlatform>(input)
             }
         };

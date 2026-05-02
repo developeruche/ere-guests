@@ -1,5 +1,5 @@
 use kzg_rs::{Bytes32, Bytes48, KzgProof, KzgSettings};
-use revm::precompile::{Crypto, PrecompileError};
+use revm::precompile::{Crypto, PrecompileHalt};
 
 /// Install SP1 crypto implementations
 pub fn install_crypto() {
@@ -27,7 +27,7 @@ impl Crypto for CustomCrypto {
         y: &[u8; 32],
         commitment: &[u8; 48],
         proof: &[u8; 48],
-    ) -> Result<(), PrecompileError> {
+    ) -> Result<(), PrecompileHalt> {
         if !KzgProof::verify_kzg_proof(
             &Bytes48(*commitment),
             &Bytes32(*z),
@@ -35,9 +35,9 @@ impl Crypto for CustomCrypto {
             &Bytes48(*proof),
             &self.kzg_settings,
         )
-        .map_err(|err| PrecompileError::other(err.to_string()))?
+        .map_err(|err| PrecompileHalt::other(err.to_string()))?
         {
-            return Err(PrecompileError::BlobVerifyKzgProofFailed);
+            return Err(PrecompileHalt::BlobVerifyKzgProofFailed);
         }
 
         Ok(())

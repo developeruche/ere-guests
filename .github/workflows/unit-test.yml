@@ -6,6 +6,10 @@ on:
       - main
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -50,7 +54,7 @@ jobs:
         shell: bash
         run: |
           .github/scripts/check-duplicate-pkg.sh \
-            --include '^(alloy|ethrex|ere|reth|revm)' \
+            --include '^(alloy|ethrex|ere|reth|revm|openvm|risc0|sp1|zisk)' \
             --exclude '^alloy-trie$' # Crate `mpt` depends on an older `alloy-trie` but it's okay.
 
   test:
@@ -86,7 +90,6 @@ jobs:
             --no-default-features \
             --target riscv32imac-unknown-none-elf \
             --package guest \
-            --package block-encoding-length \
             --package stateless-validator-reth \
             --package stateless-validator-common
             # --package stateless-validator-ethrex

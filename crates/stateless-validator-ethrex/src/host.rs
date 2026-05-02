@@ -1,7 +1,7 @@
 //! Implementations for host environment.
 
 use alloy_eips::eip6110::MAINNET_DEPOSIT_CONTRACT_ADDRESS;
-use ere_zkvm_interface::Input;
+use anyhow::{Context, ensure};
 use ethrex_common::{
     H160,
     types::{
@@ -9,10 +9,8 @@ use ethrex_common::{
         block_execution_witness::{self, RpcExecutionWitness},
     },
 };
-use guest::{GuestIo, Io};
-use stateless_validator_reth::guest::StatelessValidatorRethInput;
-
-use crate::guest::{StatelessValidatorEthrexGuest, StatelessValidatorEthrexInput};
+use stateless_validator_common::new_payload_request::{ForkName, NewPayloadRequest};
+use stateless_validator_reth::{guest::StatelessValidatorRethInput, host::determine_fork_name};
 
 #[rustfmt::skip]
 pub use {
@@ -20,28 +18,35 @@ pub use {
     stateless::StatelessInput,
 };
 
-impl StatelessValidatorEthrexInput {
-    /// Construct [`StatelessValidatorEthrexInput`] given [`StatelessInput`].
-    pub fn new(stateless_input: &StatelessInput, valid_block: bool) -> anyhow::Result<Self> {
-        let reth_input = StatelessValidatorRethInput::new(stateless_input, valid_block)?;
-        let new_payload_request = reth_input.new_payload_request;
+/// Builds the local EIP-8025 input buffer for the ethrex guest.
+pub fn build_eip8025_input(
+    stateless_input: &StatelessInput,
+    valid_block: bool,
+) -> anyhow::Result<Vec<u8>> {
+    let fork = determine_fork_name(
+        &stateless_input.chain_config,
+        stateless_input.block.header.timestamp,
+    );
+    ensure!(
+        matches!(fork, ForkName::Electra | ForkName::Fulu),
+        "ethrex EIP-8025 input only supports Electra/Fulu fixtures, got {fork:?}"
+    );
 
-        Ok(Self {
-            new_payload_request,
-            execution_witness: from_reth_witness_to_ethrex_witness(
-                stateless_input.block.number,
-                stateless_input,
-            )?,
-        })
-    }
+    let reth_input = StatelessValidatorRethInput::new(stateless_input, valid_block)?;
+    let new_payload_request = match reth_input.new_payload_request {
+        NewPayloadRequest::ElectraFulu(new_payload_request) => new_payload_request,
+        _ => unreachable!("fork gate above guarantees an Electra/Fulu payload"),
+    };
 
-    /// Returns [`Input`] to [`zkVM`] methods.
-    ///
-    /// [`zkVM`]: ere_zkvm_interface::zkVM
-    pub fn to_zkvm_input(&self) -> anyhow::Result<Input> {
-        let stdin = GuestIo::<StatelessValidatorEthrexGuest>::serialize_input(self)?;
-        Ok(Input::new().with_prefixed_stdin(stdin))
-    }
+    let execution_witness =
+        from_reth_witness_to_ethrex_witness(stateless_input.block.number, stateless_input)?;
+    let witness_bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&execution_witness)
+        .map_err(|err| anyhow::anyhow!("failed to rkyv-encode execution witness: {err}"))?;
+
+    Ok(crate::wire::encode_eip8025(
+        &new_payload_request,
+        witness_bytes.as_ref(),
+    ))
 }
 
 fn from_reth_witness_to_ethrex_witness(
@@ -117,7 +122,7 @@ fn from_reth_witness_to_ethrex_witness(
         bpo3_time: stateless_input.chain_config.bpo3_time,
         bpo4_time: stateless_input.chain_config.bpo4_time,
         bpo5_time: stateless_input.chain_config.bpo5_time,
-        amsterdam_time: None,
+        amsterdam_time: stateless_input.chain_config.amsterdam_time,
         enable_verkle_at_genesis: false,
     };
 
@@ -142,7 +147,9 @@ fn from_reth_witness_to_ethrex_witness(
         headers: block_headers_bytes,
     };
 
-    Ok(rpc_witness.into_execution_witness(chain_config, block_number)?)
+    rpc_witness
+        .into_execution_witness(chain_config, block_number)
+        .context("failed to convert reth witness into ethrex witness")
 }
 
 fn get_blob_schedule(
@@ -153,8 +160,9 @@ fn get_blob_schedule(
         .blob_schedule
         .get(name)
         .map(|s| ForkBlobSchedule {
-            // Reth and Ethrex have some mismatched data type representations. Reth uses bigger ints.
-            // Downcasting should never cause an overflow, but let's be safe and panic if this ever happens.
+            // Reth and Ethrex have some mismatched data type representations. Reth uses bigger
+            // ints. Downcasting should never cause an overflow, but let's be safe and
+            // panic if this ever happens.
             base_fee_update_fraction: s.update_fraction.try_into().unwrap(),
             target: s.target_blob_count.try_into().unwrap(),
             max: s.max_blob_count.try_into().unwrap(),
