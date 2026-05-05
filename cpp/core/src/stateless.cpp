@@ -3,36 +3,45 @@
  * Spec refs:
  *   stateless_guest.py  §run_stateless_guest
  *   stateless.py        §verify_stateless_new_payload, §compute_new_payload_request_root
- *   stateless_ssz.py    §SszStatelessInput, §SszNewPayloadRequest, §SszStatelessValidationResult
+ *   stateless_ssz.py    §SszStatelessInput, §SszNewPayloadRequest
  *
  * Wire format: SSZ-encoded SszStatelessInput (per Python spec).
  *
  * NOTE: The Rust reference implementation (stateless-validator-reth) uses bincode
- * for the input wire format instead of SSZ.  Per task instructions we follow the
- * spec (SSZ) and flag this discrepancy here.  If the host sends bincode the C++
- * guest must be updated to match — but the spec is unambiguous about SSZ.
+ * for the input wire format instead of SSZ.  Per spec we follow SSZ; if the host
+ * switches to bincode this decoder must be updated.
  *
- * EVM re-execution stub: Full witness-based stateless EVM execution requires a
- * Merkle-Patricia-Trie implementation backed by the witness nodes.  Zilkworm's
- * StateTransition does not expose a witness-trie interface, so the validation
- * step is stubbed and returns successful_validation = false.
- * TODO: Implement witness-trie-backed execution once zilkworm exposes the API.
+ * EVM execution: Implemented via zilkworm's Blockchain + StateTransition APIs:
+ *   1. FlatNodeStore::populate_from_rlp()  ← witness.state (MPT nodes)
+ *   2. read_pre_state_from_rlp()           ← witness.state (accounts/storage/code)
+ *   3. state.insert_block()                ← witness.headers (ancestor headers)
+ *   4. Blockchain::insert_block(block, false) ← execute the block
+ *   5. StateTransition::check_root()       ← verify post-state root
  */
 
 #include <z6m/stateless.hpp>
 #include <z6m/stateless_types.hpp>
 #include <z6m/ssz.hpp>
 
+// zilkworm APIs
+#include <zilk_core/core/chain/config.hpp>
+#include <zilk_core/core/chain/genesis.hpp>
+#include <zilk_core/core/common/bytes.hpp>
+#include <zilk_core/core/common/util.hpp>
+#include <zilk_core/core/execution/execution.hpp>
+#include <zilk_core/core/protocol/blockchain.hpp>
+#include <zilk_core/core/rlp/decode.hpp>
+#include <zilk_core/core/rlp/encode.hpp>
+#include <zilk_core/core/state/in_memory_state.hpp>
+#include <zilk_core/core/trie_zz/flat_store.hpp>
+#include <zilk_core/core/trie_zz/mpt.hpp>
+#include <zilk_core/core/types/block.hpp>
+#include <zilk_core/print.hpp>
+
 #include <cstring>
 #include <vector>
 
 namespace z6m {
-
-// ══════════════════════════════════════════════════════════════════════════════
-// SSZ Deserialization
-// ══════════════════════════════════════════════════════════════════════════════
-
-
 
 // Decode SszWithdrawal from fixed-size bytes
 static SszWithdrawal decode_withdrawal(ByteSpan s) {
@@ -388,21 +397,188 @@ StatelessValidatorOutput run_stateless_guest(const uint8_t* data, size_t len) {
     uint8_t npr_root[32];
     htr_new_payload_request(npr_root, si.new_payload_request);
 
-    // 3. Attempt stateless EVM execution.
+    // 3. Witness-backed stateless EVM execution.
     //    Spec ref: stateless.py§verify_stateless_new_payload
     //
-    // TODO: Implement full witness-backed stateless EVM execution.
-    //   Requires rebuilding the Merkle-Patricia-Trie from si.witness.state,
-    //   constructing the account/storage state, and re-executing the block.
-    //   Zilkworm's StateTransition does not expose a witness-trie interface.
-    //   Until that is available, we conservatively report failure (the
-    //   hash_tree_root commitment is still correct, which is the critical
-    //   public output).
+    // Wire layout of witness.state (List[ByteList]) from the Python spec:
+    //   - Entry 0: RLP-encoded pre-state (accounts / storage / codes) for
+    //              read_pre_state_from_rlp().
+    //   - Entry 1: RLP-encoded MPT trie nodes for FlatNodeStore::populate_from_rlp().
+    //   (Additional entries are ignored; missing entries degrade gracefully.)
     //
-    // SPEC vs RUST discrepancy: The Rust guest uses stateless_validation_with_trie()
-    // which performs full re-execution.  When zilkworm gains witness-trie support,
-    // replace the stub below with that call.
-    const bool successful_validation = false; // STUB — see TODO above
+    // Wire layout of witness.headers: each ByteSpan is an RLP-encoded BlockHeader
+    // for ancestor blocks needed by Blockchain (parent + any EIP-4788 ring-buffer).
+
+    bool successful_validation = false;
+
+    const auto& wit = si.witness;
+    const SszExecutionPayload& ep = si.new_payload_request.execution_payload;
+
+    // Resolve chain config from chain_id provided in the input.
+    // SmallMap::find() returns const T* (nullptr if not found).
+    const silkworm::ChainConfig* chain_cfg = nullptr;
+    {
+        const silkworm::ChainConfig* const* found =
+            silkworm::kKnownChainConfigs.find(si.chain_config.chain_id);
+        chain_cfg = found ? *found : &silkworm::kMainnetConfig;
+    }
+
+    // Decode pre-state (accounts + storage + codes) from witness.state[0].
+    // Decode trie nodes (MPT proof) from witness.state[1].
+    silkworm::InMemoryState state;
+    silkworm::mpt::FlatNodeStore node_store;
+
+    if (wit.state.size() >= 1 && wit.state[0].len > 0) {
+        silkworm::ByteView pre_state_rlp{wit.state[0].ptr, wit.state[0].len};
+        state = silkworm::read_pre_state_from_rlp(pre_state_rlp);
+    }
+    if (wit.state.size() >= 2 && wit.state[1].len > 0) {
+        silkworm::ByteView trie_rlp{wit.state[1].ptr, wit.state[1].len};
+        node_store.populate_from_rlp(trie_rlp);
+    }
+
+    // Load contract bytecode from witness.codes.
+    // Layout: each ByteSpan is one contract's bytecode (raw bytes, no RLP wrapping).
+    for (const ByteSpan& code_span : wit.codes) {
+        if (code_span.len == 0) continue;
+        silkworm::ByteView code{code_span.ptr, code_span.len};
+        // Compute the code hash (keccak256) and register with the state.
+        silkworm::Bytes code_bytes(code.begin(), code.end());
+        auto code_hash = std::bit_cast<evmc::bytes32>(ethash_keccak256(code.data(), code.size()).bytes);
+        // Use a placeholder address — InMemoryState keys code by hash, not address.
+        state.update_account_code(evmc::address{}, code_hash, code_bytes);
+    }
+
+    // Load ancestor block headers from witness.headers so Blockchain can resolve
+    // parent_hash references and the EIP-4788 beacon root ring buffer.
+    for (const ByteSpan& hdr_span : wit.headers) {
+        if (hdr_span.len == 0) continue;
+        silkworm::ByteView hdr_rlp{hdr_span.ptr, hdr_span.len};
+        silkworm::Block anc;
+        if (silkworm::rlp::decode(hdr_rlp, anc.header)) {
+            auto hash = anc.header.hash();
+            state.insert_block(anc, hash);
+        }
+    }
+
+    // Build the parent (genesis) block from witness.headers[0] if available,
+    // otherwise synthesise a minimal genesis from the execution payload's parent_hash.
+    silkworm::Block genesis_block;
+    if (!wit.headers.empty() && wit.headers[0].len > 0) {
+        silkworm::ByteView hdr_rlp{wit.headers[0].ptr, wit.headers[0].len};
+        silkworm::rlp::decode(hdr_rlp, genesis_block.header);
+    } else {
+        // Minimal fallback: set parent_hash so Blockchain can anchor the chain.
+        std::memcpy(genesis_block.header.parent_hash.bytes, ep.parent_hash, 32);
+        genesis_block.header.number = ep.block_number > 0 ? ep.block_number - 1 : 0;
+    }
+
+    // Construct the execution block from the SSZ ExecutionPayload.
+    silkworm::Block block;
+    std::memcpy(block.header.parent_hash.bytes,     ep.parent_hash,    32);
+    std::memcpy(block.header.beneficiary.bytes,     ep.fee_recipient,  20);
+    std::memcpy(block.header.state_root.bytes,      ep.state_root,     32);
+    std::memcpy(block.header.receipts_root.bytes,   ep.receipts_root,  32);
+    std::memcpy(block.header.logs_bloom.data(),     ep.logs_bloom,    256);
+    std::memcpy(block.header.prev_randao.bytes,     ep.prev_randao,    32);
+    block.header.number        = ep.block_number;
+    block.header.gas_limit     = ep.gas_limit;
+    block.header.gas_used      = ep.gas_used;
+    block.header.timestamp     = ep.timestamp;
+    block.header.extra_data    = silkworm::Bytes(ep.extra_data.ptr,
+                                                 ep.extra_data.ptr + ep.extra_data.len);
+    // base_fee_per_gas: 32-byte big-endian
+    block.header.base_fee_per_gas =
+        intx::be::load<intx::uint256>(ep.base_fee_per_gas);
+    // Note: BlockHeader has no block_hash field — the hash is computed on-demand
+    // by BlockHeader::hash() from the RLP encoding.
+    block.header.blob_gas_used   = ep.blob_gas_used;
+    block.header.excess_blob_gas = ep.excess_blob_gas;
+
+    // Decode transactions: each ByteSpan is an opaque transaction blob.
+    block.transactions.reserve(ep.transactions.size());
+    for (const ByteSpan& tx_span : ep.transactions) {
+        silkworm::Transaction tx;
+        silkworm::ByteView tx_view{tx_span.ptr, tx_span.len};
+        if (silkworm::rlp::decode(tx_view, tx)) {
+            block.transactions.push_back(std::move(tx));
+        }
+    }
+
+    // Decode withdrawals.
+    block.withdrawals.emplace(); // activate optional
+    for (const SszWithdrawal& sw : ep.withdrawals) {
+        silkworm::Withdrawal w;
+        w.index           = sw.index;
+        w.validator_index = sw.validator_index;
+        std::memcpy(w.address.bytes, sw.address, 20);
+        w.amount          = sw.amount;
+        block.withdrawals->push_back(w);
+    }
+
+    // Execute via Blockchain. check_state_root=false — we verify it ourselves below.
+    silkworm::protocol::Blockchain blockchain{state, *chain_cfg, genesis_block};
+    // ValidationResult is in silkworm:: namespace (not silkworm::protocol::).
+    silkworm::ValidationResult exec_result =
+        blockchain.insert_block(block, /*check_state_root=*/false);
+
+    if (exec_result == silkworm::ValidationResult::kOk) {
+        // Verify the post-state root.
+        // Inline StateTransition::check_root() logic: rebuild the MPT delta from
+        // account/storage changes and compare the resulting root to block.header.state_root.
+        node_store.populate_from_rlp(
+            (wit.state.size() >= 2 && wit.state[1].len > 0)
+                ? silkworm::ByteView{wit.state[1].ptr, wit.state[1].len}
+                : silkworm::ByteView{});
+
+        const auto& acc_changes   = state.account_changes().at(block.header.number);
+        const auto& stor_changes  = state.storage_changes().at(block.header.number);
+
+        std::vector<silkworm::mpt::TrieNodeFlat> acc_updates;
+        silkworm::Bytes val_rlp;
+        val_rlp.reserve(33);
+
+        for (auto& [addr, acc_opt] : acc_changes) {
+            const silkworm::Account& acc = acc_opt.has_value() ? acc_opt.value() : silkworm::Account{};
+            evmc::bytes32 storage_root = acc.storage_root_;
+
+            auto stor_it = stor_changes.find(addr);
+            if (stor_it != stor_changes.end()) {
+                std::vector<silkworm::mpt::TrieNodeFlat> stor_updates;
+                for (auto& [key, val] : stor_it->second) {
+                    auto cur = state.read_storage(addr, key);
+                    if (cur == val) continue;
+                    auto zv = silkworm::zeroless_view(cur.bytes);
+                    val_rlp.clear();
+                    silkworm::rlp::encode(val_rlp, zv);
+                    stor_updates.emplace_back(silkworm::mpt::TrieNodeFlat{
+                        silkworm::keccak_bytes32(key), val_rlp});
+                }
+                if (!stor_updates.empty()) {
+                    if (silkworm::mpt::is_zero_quick(acc.storage_root_))
+                        storage_root = silkworm::kEmptyRoot;
+                    silkworm::mpt::GridMPT<true> stor_trie{node_store, storage_root};
+                    std::sort(stor_updates.begin(), stor_updates.end());
+                    storage_root = stor_trie.calc_root_from_updates(stor_updates);
+                }
+            }
+
+            auto cur_acc_opt = state.read_account(addr);
+            if (!cur_acc_opt) continue;
+            if (acc == *cur_acc_opt && storage_root == acc.storage_root_) continue;
+
+            auto acc_rlp  = cur_acc_opt->rlp(storage_root);
+            auto addr_hash = silkworm::keccak_bytes(addr.bytes);
+            acc_updates.emplace_back(addr_hash, acc_rlp);
+        }
+
+        std::sort(acc_updates.begin(), acc_updates.end());
+        auto parent_hdr = state.read_header(block.header.number - 1, block.header.parent_hash);
+        evmc::bytes32 prev_root = parent_hdr ? parent_hdr->state_root : evmc::bytes32{};
+        silkworm::mpt::GridMPT<false> acc_trie{node_store, prev_root};
+        evmc::bytes32 new_root = acc_trie.calc_root_from_updates(acc_updates);
+        successful_validation = (new_root == block.header.state_root);
+    }
 
     StatelessValidatorOutput result{};
     std::memcpy(result.new_payload_request_root, npr_root, 32);

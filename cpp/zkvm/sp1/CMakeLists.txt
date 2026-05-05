@@ -14,8 +14,8 @@ include(FetchContent)
 
 FetchContent_Declare(
     zilkworm
-    GIT_REPOSITORY https://github.com/erigontech/zilkworm.git
-    GIT_TAG        master
+    GIT_REPOSITORY https://github.com/developeruche/zilkworm.git
+    GIT_TAG        feat/spec-v0.1
     GIT_SHALLOW    TRUE
 )
 
@@ -59,9 +59,10 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 # zilkworm third-party dependencies (provides evmone, intx, etc.)
 set(_ZW_BIN "${CMAKE_BINARY_DIR}/zilkworm")
 add_subdirectory("${zilkworm_SOURCE_DIR}/third_party" "${_ZW_BIN}/third_party")
+add_subdirectory("${zilkworm_SOURCE_DIR}/zilk_core"   "${_ZW_BIN}/zilk_core")
 
-# z6m core library (SSZ decode, hash_tree_root, stateless validation).
-# Must come AFTER zilkworm third_party so the evmone target exists.
+# z6m core library (SSZ decode, hash_tree_root, stateless EVM execution).
+# Must come AFTER zilkworm subdirectories so silkworm_dev / silkworm_core exist.
 add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/../../core"
     "${CMAKE_BINARY_DIR}/z6m_core"
@@ -116,7 +117,9 @@ target_link_directories(z6m_guest PRIVATE
 )
 
 target_link_libraries(z6m_guest PRIVATE
-    z6m_core        # stateless guest logic (SSZ decode, hash_tree_root)
+    z6m_core        # stateless guest logic (SSZ decode, hash_tree_root, EVM execution)
+    silkworm_dev    # Blockchain, StateTransition, check_root
+    silkworm_core   # EVM types, RLP, trie
     evmone          # SHA-256 precompile used by sp1_runtime.cpp + z6m_core
     stdc++ c m gcc nosys
 )

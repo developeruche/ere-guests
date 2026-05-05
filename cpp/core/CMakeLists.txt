@@ -3,10 +3,12 @@
 # This CMakeLists.txt defines the z6m_core static library.
 # It is NOT a standalone CMake project — it is always consumed as a
 # subdirectory by a zkVM-specific CMakeLists.txt (e.g. zkvm/sp1/CMakeLists.txt)
-# which has already fetched zilkworm and set SILKWORM_MAIN_DIR.
+# which has already fetched zilkworm and defined the required targets:
+#   - silkworm_dev   (Blockchain, StateTransition, InMemoryState)
+#   - silkworm_core  (EVM types, RLP, trie)
 #
 # Usage in a zkVM CMakeLists.txt:
-#   # After zilkworm third_party subdirectory is added:
+#   # After zilkworm targets exist:
 #   add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../../core" "${CMAKE_BINARY_DIR}/z6m_core")
 #   target_link_libraries(my_guest PRIVATE z6m_core)
 
@@ -22,9 +24,13 @@ target_include_directories(z6m_core
             "${SILKWORM_MAIN_DIR}/third_party/evmone/lib/evmone_precompiles"
 )
 
-# evmone provides evmone::crypto::sha256 used by ssz.hpp / stateless.cpp.
+# evmone provides evmone::crypto::sha256 (ssz.hpp / stateless.cpp).
+# silkworm_dev / silkworm_core provide Blockchain, StateTransition, InMemoryState, etc.
 target_link_libraries(z6m_core
-    PRIVATE evmone
+    PRIVATE
+        evmone
+        silkworm_dev
+        silkworm_core
 )
 
 target_compile_features(z6m_core PUBLIC cxx_std_23)
