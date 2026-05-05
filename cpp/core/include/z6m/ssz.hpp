@@ -25,11 +25,11 @@
 #include <span>
 #include <evmone_precompiles/sha256.hpp>
 
-// ─── SSZ primitive sizes ──────────────────────────────────────────────────────
+// SSZ primitive sizes
 
 static constexpr size_t SSZ_OFFSET_SIZE = 4; // uint32 LE
 
-// ─── Byte-span view (no ownership) ───────────────────────────────────────────
+// Byte-span view (no ownership)
 
 struct ByteSpan {
     const uint8_t* ptr;
@@ -45,7 +45,7 @@ struct ByteSpan {
     }
 };
 
-// ─── LE integer readers ───────────────────────────────────────────────────────
+// LE integer readers
 
 [[nodiscard]] static inline uint32_t read_u32le(const uint8_t* p) noexcept {
     uint32_t v;
@@ -59,7 +59,7 @@ struct ByteSpan {
     return v;
 }
 
-// ─── SHA-256 wrapper (evmone, SP1-accelerated) ────────────────────────────────
+// SHA-256 wrapper (evmone, SP1-accelerated)
 
 static inline void sha256_bytes(uint8_t out[32], const uint8_t* data, size_t len) noexcept {
     evmone::crypto::sha256(
@@ -74,7 +74,7 @@ static inline void sha256_pair(uint8_t out[32], const uint8_t left[32], const ui
     sha256_bytes(out, buf, 64);
 }
 
-// ─── SSZ hash_tree_root primitives ───────────────────────────────────────────
+// SSZ hash_tree_root primitives
 
 // Zero hash used as padding when merkleizing with fewer chunks than the next power-of-two.
 static constexpr uint8_t ZERO_HASH[32] = {};
@@ -161,7 +161,7 @@ static void htr_byte_list(uint8_t out[32], const uint8_t* data, size_t data_len,
     mix_in_length(out, root, data_len);
 }
 
-// ─── Merkleize implementations ────────────────────────────────────────────────
+// Merkleize implementations
 
 // Next power of two >= n (minimum 1).
 static size_t next_pow2(size_t n) noexcept {
@@ -219,7 +219,7 @@ static void merkleize(uint8_t out[32], const uint8_t* data, size_t nchunks, size
     merkleize_power_of_two(out, data, nchunks, padded);
 }
 
-// ─── SSZ container merkleize (for containers with a known set of field roots) ─
+// SSZ container merkleize (for containers with a known set of field roots)
 
 // Given an array of field hash_tree_roots (each 32 bytes), compute the
 // container's hash_tree_root = merkleize(field_roots, limit=nfields).
@@ -229,7 +229,7 @@ static void htr_container(uint8_t out[32], const uint8_t (*field_roots)[32], siz
     merkleize_chunks(out, field_roots[0], nfields);
 }
 
-// ─── SSZ deserialization helpers ──────────────────────────────────────────────
+// SSZ deserialization helpers
 
 // Read a uint32 offset from an SSZ offset table entry.
 static inline uint32_t ssz_read_offset(ByteSpan s, size_t i) noexcept {

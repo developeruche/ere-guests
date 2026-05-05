@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: Apache-2.0
 // Stateless guest — SSZ input decoding, hash_tree_root commitment, EVM execution.
 
 #include <z6m/stateless.hpp>
@@ -23,8 +22,6 @@
 #include <vector>
 
 namespace z6m {
-
-// ── SSZ Deserialization ───────────────────────────────────────────────────────
 
 static SszWithdrawal decode_withdrawal(ByteSpan s) {
     SszWithdrawal w{};
@@ -193,8 +190,6 @@ static SszStatelessInput decode_stateless_input(ByteSpan s) {
     return si;
 }
 
-// ── hash_tree_root ────────────────────────────────────────────────────────────
-
 static void htr_withdrawal(uint8_t out[32], const SszWithdrawal& w) {
     uint8_t f[4][32] = {};
     htr_uint64(f[0], w.index);
@@ -299,8 +294,6 @@ static void htr_new_payload_request(uint8_t out[32], const SszNewPayloadRequest&
     htr_execution_requests(f[3], r.execution_requests);
     htr_container(out, f, 4);
 }
-
-// ── Entry point ───────────────────────────────────────────────────────────────
 
 StatelessValidatorOutput run_stateless_guest(const uint8_t* data, size_t len) {
     ByteSpan input{data, len};
