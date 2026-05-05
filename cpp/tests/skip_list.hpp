@@ -1,8 +1,10 @@
 #pragma once
-// skip_list.hpp — EF test files to skip (ported from Rust's should_skip())
+// skip_list.hpp — EF test files to skip
 
 #include <string_view>
 
+// File-name skips — identical to the Rust ef-tests should_skip() list.
+// See: stateless/testing/ef-tests/src/cases/blockchain_test.rs
 inline bool should_skip(std::string_view name) {
     // funky test with bigint 0x00 value in json — not possible on mainnet
     if (name == "ValueOverflow.json")          return true;
@@ -40,16 +42,24 @@ inline bool should_skip(std::string_view name) {
     return false;
 }
 
-// Outdated EOF tests live under EIPTests/stEOF — skip the whole subtree.
-// Uncle/ommer tests are PoW-era and not relevant to the stateless guest.
+// Path-level skips.
+//
+// EIPTests/stEOF — also skipped by Rust (outdated EOF tests).
+//
+// bcUncle* — NOT skipped by the Rust suite; reth passes these via full PoW
+//   uncle/ommer consensus validation. Zilkworm's Blockchain::insert_block()
+//   does not validate uncle headers the same way, so they fail in C++.
+//   TODO: remove these once zilkworm uncle validation is on par with reth.
+//
+// .meta — not relevant in Rust (Cargo doesn't walk directories the same way).
 inline bool should_skip_path(std::string_view path) {
     auto contains = [&](std::string_view needle) {
         return path.find(needle) != std::string_view::npos;
     };
-    if (contains("EIPTests") && contains("stEOF")) return true;
-    if (contains("bcUncleSpecialTests"))   return true;
-    if (contains("bcUncleHeaderValidity")) return true;
-    if (contains("bcUncleTest"))           return true;
-    if (contains(".meta")) return true;
+    if (contains("EIPTests") && contains("stEOF")) return true;  // also in Rust
+    if (contains("bcUncleSpecialTests"))   return true;  // C++ only — zilkworm gap
+    if (contains("bcUncleHeaderValidity")) return true;  // C++ only — zilkworm gap
+    if (contains("bcUncleTest"))           return true;  // C++ only — zilkworm gap
+    if (contains(".meta")) return true;                  // C++ only — directory walker
     return false;
 }

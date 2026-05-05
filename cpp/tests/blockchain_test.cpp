@@ -16,7 +16,7 @@
 #include <zilk_core/core/types/account.hpp>
 #include <zilk_core/core/types/block.hpp>
 
-// ── Fork name → ChainConfig ───────────────────────────────────────────────────
+// Fork name → ChainConfig
 //
 // EF tests activate all forks up to the named level at block/time 0.
 // We construct per-fork configs accordingly. The merge is treated as
@@ -169,7 +169,7 @@ static silkworm::InMemoryState build_initial_state(
     return state;
 }
 
-// ── Build silkworm::Block from RLP bytes ──────────────────────────────────────
+// Build silkworm::Block from RLP bytes
 
 static std::optional<silkworm::Block> decode_block_rlp(const silkworm::Bytes& rlp) {
     silkworm::Block block;
@@ -178,7 +178,7 @@ static std::optional<silkworm::Block> decode_block_rlp(const silkworm::Bytes& rl
     return block;
 }
 
-// ── Run one BlockchainTest ────────────────────────────────────────────────────
+// Run one BlockchainTest
 
 static TestReport run_single_test(const EfBlockchainTest& tc) {
     if (excluded_fork(tc.network))
@@ -275,7 +275,7 @@ static TestReport run_single_test(const EfBlockchainTest& tc) {
     return {TestResult::Pass, {}};
 }
 
-// ── File-level runner ─────────────────────────────────────────────────────────
+// File-level runner
 
 std::vector<FileReport> run_blockchain_test_file(const std::filesystem::path& json_path) {
     std::vector<FileReport> results;

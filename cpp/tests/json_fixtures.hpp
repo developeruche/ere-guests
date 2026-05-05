@@ -15,7 +15,7 @@
 #include <zilk_core/core/common/bytes.hpp>
 #include <zilk_core/core/common/util.hpp>
 
-// ── Parsing helpers ───────────────────────────────────────────────────────────
+// Parsing helpers
 
 // Strip "0x" prefix and decode hex → bytes
 inline silkworm::Bytes hex_to_bytes(const std::string& s) {
@@ -68,7 +68,7 @@ inline evmc::address hex_to_address(const std::string& s) {
     return out;
 }
 
-// ── EF test data structures ───────────────────────────────────────────────────
+// EF test data structures
 
 struct EfAccount {
     intx::uint256 balance;
@@ -114,7 +114,7 @@ struct EfBlockchainTest {
     std::string last_block_hash;
 };
 
-// ── nlohmann/json deserialization ─────────────────────────────────────────────
+//  nlohmann/json deserialization
 
 inline EfAccount parse_account(const nlohmann::json& j) {
     EfAccount a;
@@ -191,7 +191,7 @@ inline EfBlockchainTest parse_blockchain_test(const nlohmann::json& j) {
     return t;
 }
 
-// Top-level: a .json file is a map of test-name → BlockchainTest
+// a .json file is a map of test-name → BlockchainTest
 inline std::map<std::string, EfBlockchainTest> load_blockchain_tests(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) throw std::runtime_error("Cannot open: " + path);
