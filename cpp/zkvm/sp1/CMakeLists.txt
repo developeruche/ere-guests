@@ -56,14 +56,12 @@ include(GNUInstallDirs)
 # It must be on the global include path BEFORE those subdirectories are processed.
 include_directories("${CMAKE_CURRENT_SOURCE_DIR}/src/include")
 
-# zilkworm dependencies
+# zilkworm third-party dependencies (provides evmone, intx, etc.)
 set(_ZW_BIN "${CMAKE_BINARY_DIR}/zilkworm")
 add_subdirectory("${zilkworm_SOURCE_DIR}/third_party" "${_ZW_BIN}/third_party")
-add_subdirectory("${zilkworm_SOURCE_DIR}/zilk_core"   "${_ZW_BIN}/zilk_core")
 
-# z6m core library
-# Adds the z6m_core static library target (platform-agnostic EVM execution).
-# Must come AFTER zilkworm subdirectories so silkworm_dev / silkworm_core exist.
+# z6m core library (SSZ decode, hash_tree_root, stateless validation).
+# Must come AFTER zilkworm third_party so the evmone target exists.
 add_subdirectory(
     "${CMAKE_CURRENT_SOURCE_DIR}/../../core"
     "${CMAKE_BINARY_DIR}/z6m_core"
@@ -118,11 +116,8 @@ target_link_directories(z6m_guest PRIVATE
 )
 
 target_link_libraries(z6m_guest PRIVATE
-    z6m_core        # platform-agnostic EVM execution (z6m::execute_*)
-    silkworm_dev    # StateTransition (transitive from z6m_core, listed explicitly for link order)
-    silkworm_core   # EVM types, RLP, trie
-    evmone          # EVM interpreter + SHA-256 used by sp1_runtime.cpp
-    blst::blst      # BLS12-381 crypto
+    z6m_core        # stateless guest logic (SSZ decode, hash_tree_root)
+    evmone          # SHA-256 precompile used by sp1_runtime.cpp + z6m_core
     stdc++ c m gcc nosys
 )
 

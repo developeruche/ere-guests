@@ -1,52 +1,61 @@
-/* SP1 HyperCube — guest entry point.
+/* SP1 stateless-validator guest entry point.
  *
- * This file is SP1-specific: all I/O uses SP1 hint-stream ecalls.
- * The EVM execution itself is delegated to z6m::execute_*() from core/,
- * which has no knowledge of SP1 or any other zkVM.
+ * Spec ref: stateless_guest.py§run_stateless_guest
  *
  * Execution flow (invoked from __start() in sp1_runtime.cpp):
  *
- *   1. Read a 1-byte mode flag from the SP1 hint stream.
- *        0x00 → production mode (RLP-encoded block + state)
- *        0x01 → test mode       (JSON EIP state-test fixture)
- *   2. Read the payload from the SP1 hint stream.
- *   3. Call z6m::execute_rlp() or z6m::execute_test_json() from core/.
- *   4. Serialise gas_used as 8 little-endian bytes and write to the
- *      SP1 public-values file descriptor.
- *   5. Return to __start(), which SHA-256 hashes the public values,
- *      commits the digest, and calls syscall_halt(0).
+ *   1. Read the SSZ-encoded SszStatelessInput from the SP1 hint stream
+ *      (a single read_vec_raw() call — no mode-flag prefix).
+ *   2. Call z6m::run_stateless_guest() which:
+ *        a. SSZ-decodes SszStatelessInput.
+ *        b. Computes hash_tree_root(new_payload_request).
+ *        c. Attempts stateless EVM execution (currently stubbed — see stateless.cpp).
+ *        d. Returns StatelessValidatorOutput{root[32], successful_validation}.
+ *   3. Serialise the output as 33 raw bytes: root[0..32] || success[32].
+ *   4. SHA-256 the 33 bytes.
+ *   5. Write the 32-byte SHA-256 digest to SP1_FD_PUBLIC_VALUES.
+ *      The SP1 runtime will SHA-256 that again at halt and commit the
+ *      final digest — matching the Rust run_output_sha256 convention.
+ *
+ * SPEC vs RUST discrepancy (output format):
+ *   - Python spec output: SSZ-encoded SszStatelessValidationResult (41 bytes
+ *     = root[32] || success[1] || chain_config.chain_id[8]).
+ *   - Rust guest output:  raw StatelessValidatorOutput (33 bytes
+ *     = root[32] || success[1]); chain_config is NOT included.
+ *   We follow the Rust convention (33 bytes) so the C++ and Rust guests
+ *   produce identical public-value commitments.  The chain_config omission
+ *   is a known divergence from the Python spec; see stateless.py TODO.
  */
 
-#include <z6m/executor.hpp>        // platform-agnostic EVM core
-#include "include/sp1_syscalls.hpp" // SP1 ecall wrappers
+#include <z6m/stateless.hpp>        // z6m::run_stateless_guest
+#include "include/sp1_syscalls.hpp" // read_vec_raw, syscall_write, SP1_FD_PUBLIC_VALUES
 
 #include <cstdint>
-#include <format>
+#include <cstring>
+#include <evmone_precompiles/sha256.hpp>
 
 extern "C" int main()
 {
-    /* ── 1. Read the mode flag ─────────────────────────────────────────── */
-    ReadVecResult mode_buf = read_vec_raw();
-    const bool is_test = (mode_buf.len > 0 && mode_buf.ptr[0] != 0);
-
-    /* ── 2. Read the payload ───────────────────────────────────────────── */
+    /* ── 1. Read SSZ-encoded SszStatelessInput ─────────────────────────── */
     ReadVecResult input_buf = read_vec_raw();
 
-    sys_println("Zilkworm guest initialised");
+    /* ── 2. Run spec-compliant stateless validation ─────────────────────── */
+    const z6m::StatelessValidatorOutput result =
+        z6m::run_stateless_guest(input_buf.ptr, input_buf.len);
 
-    /* ── 3. Execute — delegated entirely to the platform-agnostic core ── */
-    const z6m::ExecutionResult result = is_test
-        ? z6m::execute_test_json(input_buf.ptr, input_buf.len)
-        : z6m::execute_rlp(input_buf.ptr, input_buf.len);
+    /* ── 3. Serialise: root[0..32] || success[32]  (33 bytes) ─────────── */
+    uint8_t raw[33];
+    std::memcpy(raw, result.new_payload_request_root, 32);
+    raw[32] = result.successful_validation ? 1 : 0;
 
-    sys_println(std::format("[executor] gas used: {}", result.gas_used));
+    /* ── 4. SHA-256 the 33-byte output (mirrors Rust run_output_sha256) ── */
+    uint8_t digest[32];
+    evmone::crypto::sha256(
+        reinterpret_cast<std::byte*>(digest),
+        reinterpret_cast<const std::byte*>(raw), 33);
 
-    /* ── 4. Publish result via SP1 public-values channel ─────────────── */
-    uint8_t out[8];
-    for (int i = 0; i < 8; ++i)
-        out[i] = static_cast<uint8_t>(result.gas_used >> (i * 8));
-
-    syscall_write(SP1_FD_PUBLIC_VALUES, out, sizeof(out));
+    /* ── 5. Write digest to public-values FD; runtime will SHA-256 again ─ */
+    syscall_write(SP1_FD_PUBLIC_VALUES, digest, sizeof(digest));
 
     return 0;
 }
