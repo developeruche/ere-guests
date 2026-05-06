@@ -49,17 +49,16 @@ inline bool should_skip(std::string_view name) {
 // bcUncle* — NOT skipped by the Rust suite; reth passes these via full PoW
 //   uncle/ommer consensus validation. Zilkworm's Blockchain::insert_block()
 //   does not validate uncle headers the same way, so they fail in C++.
-//   TODO: remove these once zilkworm uncle validation is on par with reth.
 //
 // .meta — not relevant in Rust (Cargo doesn't walk directories the same way).
 inline bool should_skip_path(std::string_view path) {
     auto contains = [&](std::string_view needle) {
         return path.find(needle) != std::string_view::npos;
     };
-    if (contains("EIPTests") && contains("stEOF")) return true;  // also in Rust
-    if (contains("bcUncleSpecialTests"))   return true;  // C++ only — zilkworm gap
-    if (contains("bcUncleHeaderValidity")) return true;  // C++ only — zilkworm gap
-    if (contains("bcUncleTest"))           return true;  // C++ only — zilkworm gap
-    if (contains(".meta")) return true;                  // C++ only — directory walker
+    if (contains("EIPTests") && contains("stEOF")) return true;
+    if (contains("bcUncleSpecialTests"))   return true;
+    if (contains("bcUncleHeaderValidity")) return true;
+    if (contains("bcUncleTest"))           return true;
+    if (contains(".meta")) return true;
     return false;
 }
